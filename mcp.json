@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "./playground"
+      ],
+      "extended": {
+        "allowTools": ["read_text_file", "write_file", "edit_file", "list_directory", "search_files"],
+        "disabledByDefault": ["write_file", "edit_file"],
+        "descriptionOverrides": {
+          "read_text_file": "Read the contents of a file. Supports optional 'head' (first N lines) and 'tail' (last N lines) parameters — use these when reading large chunked files to avoid loading unnecessary content. Always include the full file path and relevant line range when citing content from this tool in your response.",
+          "list_directory": "List the contents of a directory. Always include the full path when referencing files from this tool in your response.",
+          "search_files": "Search for files by name or content pattern. Before calling this tool, decompose the user query into specific keyword or filename patterns. Use regex alternation (e.g. 'payment|invoice|due_date') rather than passing the raw user question."
+        }
+      }
+    }
+  }
+}

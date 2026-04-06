@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1775406551041,
+      "tag": "0000_windy_mordo",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1775407431205,
+      "tag": "0001_lumpy_apocalypse",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1775481494106,
+      "tag": "0002_cuddly_phantom_reporter",
+      "breakpoints": true
+    }
+  ]
+}
