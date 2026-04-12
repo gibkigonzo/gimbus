@@ -1,49 +1,46 @@
 ---
 name: design-agent-prompt
 description: >
-  Design, rewrite, or update system prompts for AI agents — both the main agent (server/utils/prompts.ts)
-  and sub-agents (AGENT_REGISTRY in server/utils/tools/delegate-agents.ts).
-  Applies S02E01 constraints (static, no tool names, no dynamic data) and S02E05 anatomy
-  (identity, protocol, voice, tools). Use for creating new prompts from scratch OR iterating
-  on existing ones. Replaces update-system-prompt skill.
+  Design, rewrite, or update system prompts for AI agents. Provide a file reference to the
+  file containing the prompt (e.g. #file:src/agents/prompts.ts), or say "new file" for a
+  new one. Use for creating new prompts from scratch OR iterating on existing ones.
 argument-hint: >
-  Describe the target and goal, e.g.:
-  "main agent — add clearer recovery behavior"
-  "new sub-agent — writer agent for drafting markdown documents"
-  "update researcher sub-agent — add protocol for structuring findings"
+  Provide a file reference and goal, e.g.:
+  "#file:src/agents/prompts.ts — add clearer recovery behavior"
+  "#file:src/agents/registry.ts — new writer sub-agent for drafting markdown"
+  "new file at src/agents/researcher.ts — researcher sub-agent"
 user-invocable: true
 ---
 
 # Design Agent Prompt
 
-Designs or updates system prompts for any agent in the project. Applies design knowledge from
-S02E01 (context management, static prompts) and S02E05 (agent instruction anatomy).
+Designs or updates system prompts for any agent in the project.
 
 ## When to Use
 
 | Situation | Use this skill |
 |-----------|---------------|
-| Main agent (`prompts.ts`) needs a new behavior section | yes |
-| Main agent has a quality problem (stops early, hallucinates, ignores recovery) | yes |
-| New sub-agent needed in `AGENT_REGISTRY` | yes |
-| Existing sub-agent needs its prompt improved | yes |
-| You want to restructure a prompt using S02E05 anatomy | yes |
+| A referenced prompt file needs a new behavior section | yes |
+| A prompt has a quality problem (stops early, hallucinates, ignores recovery) | yes |
+| A new sub-agent entry is needed in an agent registry | yes |
+| An existing prompt file needs improvement | yes |
+| You want to restructure a prompt using the four-section anatomy | yes |
 | Quick one-line fix to an existing section | optional |
 
-## S02E01 Constraints — always apply
+## Constraints — always apply
 
 These rules apply to **every** prompt in this project, regardless of agent type:
 
 | Rule | Why |
 |------|-----|
-| **Static content only** | Main agent system prompt uses `cache_control: ephemeral`. Any dynamic data (date, file state, tool list) busts the cache on every request |
+| **Static content only** | System prompts are often cached. Any dynamic data (date, session state, tool list) busts the cache and increases cost |
 | **Generic behaviors, not specific procedures** | Step-by-step instructions break when the environment changes. Principles work everywhere |
 | **No tool names** | Tools are optional and can change. Use conditional language: "if a task management tool is available…" |
-| **No dynamic data** | Date, chatId, current file, user identity → these go into the user message `<context>`, never into a system prompt |
+| **No dynamic data** | Date, session ID, current file, user identity → these go into the user message as context, never into a system prompt |
 | **Map, not specification** | Tell the model *where it is* and *how to behave*. Do not try to cover every scenario |
 | **Principles, not procedures** | "Always verify before concluding" beats "1. Call X. 2. Read Y. 3. Compare Z." |
 
-## S02E05 Anatomy — four sections
+## Anatomy — four sections
 
 Every agent prompt (main or sub) can contain up to four sections. Not all are required for every agent.
 
@@ -93,9 +90,9 @@ Useful additions:
 
 ### `<tools>` — Available tools and agents (generated or minimal)
 
-Information about tools and sub-agents the model can invoke. For the main agent this section
-can be partially generated (agent registry changes per session). For sub-agents it is usually
-omitted — the tool list is enforced by `allowTools`, not the prompt.
+Information about tools and sub-agents the model can invoke. For orchestrating agents this section
+may be partially generated. For sub-agents it is usually omitted — the available tool set is
+enforced at the framework level, not in the prompt.
 
 Add a `<tools>` section in the prompt only when:
 - There is a specific tool the agent frequently confuses with another
@@ -106,9 +103,7 @@ Add a `<tools>` section in the prompt only when:
 
 ### 1. Read current state
 
-Depending on the target, read in full:
-- **Main agent**: `server/utils/prompts.ts`
-- **Sub-agent**: `server/utils/tools/delegate-agents.ts` (full file)
+Read the file the user referenced in full. If the user said "new file", skip this step and proceed to the interview.
 
 ### 2. Interview — before writing anything
 
@@ -149,49 +144,26 @@ Avoid:
 
 ### 4. Apply the change
 
-#### Main agent — `server/utils/prompts.ts`
+Edit the file the user referenced using `replace_string_in_file`. For a new file, create it at the path the user specified — choose a format based on how the file will be consumed.
 
-Edit using `replace_string_in_file`. Rules:
-- Current section order: Task management → Exploration → General → Security → Recovery → Workflow → Delegation → Goal
-- Add new sections before `## Goal` unless they clearly belong inside an existing section
-- Do not add TypeScript comments or annotations — prompt content only
-- Backticks inside the template literal must be escaped: `` \` ``
-- English only
-
-#### Sub-agent — `server/utils/tools/delegate-agents.ts`
-
-For new sub-agents, add an entry to `AGENT_REGISTRY`:
-
-```typescript
-agentName: {
-  description: 'One sentence — shown to the orchestrating LLM to help it choose. Start with a verb.',
-  systemPrompt: `<identity>
-...
-</identity>
-
-<protocol>
-...
-</protocol>`,
-  allowTools: ['tool1', 'tool2']   // omit to allow all except 'delegate'
-}
-```
-
-For updates to existing sub-agents, edit only the `systemPrompt` field.
-
-`allowTools` is a security boundary — do not expand it beyond what the agent genuinely needs.
+Rules:
+- Match the file's existing format and conventions exactly
+- Do not add comments or annotations outside the prompt content
+- If the language requires escaping (e.g. backticks inside a template literal), escape them
+- If a section must stay last or unchanged (e.g. a `## Goal` closing section), respect that
+- When the format includes a tool permission list, treat it as a security boundary — do not expand it beyond what the agent genuinely needs
 
 ### 5. Validate
 
 Re-read the final prompt and verify:
 
-**S02E01 checks:**
+**Constraint checks:**
 - [ ] No tool names in `<identity>`, `<protocol>`, or `<voice>`
 - [ ] No dynamic data (date, chatId, model name, frequently-changing paths)
 - [ ] Every instruction is a principle or behavioral rule, not a numbered procedure
-- [ ] For main agent: `## Goal` section remains last and unchanged (unless explicitly asked)
-- [ ] For main agent: no TypeScript escaping issues (backticks escaped inside template literal)
+- [ ] If the prompt is embedded as a string literal, characters are escaped as required by the host language
 
-**S02E05 checks:**
+**Anatomy checks:**
 - [ ] `<identity>` answers "who is this agent" — not "what does it do step by step"
 - [ ] `<protocol>` covers: task start, information management, blockers, delegation, user contact
 - [ ] `<voice>` present only if target style meaningfully differs from model default
@@ -201,5 +173,5 @@ Re-read the final prompt and verify:
 
 After applying changes, report:
 - **What changed**: which section(s), summary of old vs new
-- **Why**: which S02E01/S02E05 principle justified the change
+- **Why**: which constraint or anatomy principle justified the change
 - **What it fixes or enables**: the concrete behavior problem solved or capability added
