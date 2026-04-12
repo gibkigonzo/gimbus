@@ -14,6 +14,7 @@ The agent has access to tools selected per-conversation:
 |------|-------------|
 | `manage_tasks` | Maintains a task checklist across the conversation turn — add, complete, remove, list |
 | `analyze_image` | Asks a targeted vision question about an uploaded image |
+| `image_process` | Apply transforms to an uploaded image (grayscale, b/w, resize, rotate, format conversion) |
 | `publish_for_download` | Publishes a playground file (or reassembled chunks) to blob storage and returns a download URL |
 | `read_text_file` | Read any file in the sandbox |
 | `list_directory` | Browse sandbox directory contents |
@@ -29,6 +30,7 @@ Switch between models per conversation from a dropdown. All models routed via Op
 - **GPT-5 Nano** — fast and cheap
 - **Gemini 3.1 Flash Lite Preview** — Google's lightweight flash model
 - **GPT-4o Mini** — balanced capability
+- **Gemma 4 31B IT** — free-tier open model
 
 ### Per-request tool selection
 A tool picker lets you enable or disable individual tools before sending a message. The selection is persisted in a cookie so it survives page reloads.
