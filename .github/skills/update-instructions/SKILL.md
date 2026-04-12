@@ -1,13 +1,13 @@
 ---
 name: update-instructions
-description: 'Updates .github/copilot-instructions.md based on lessons and changes discovered in the current conversation. Use when new tools were added, architecture changed, conventions evolved, or outdated sections were found. Manually triggered.'
+description: 'Updates .github/copilot-instructions.md and README.md based on lessons and changes discovered in the current conversation. Use when new tools were added, architecture changed, conventions evolved, or outdated sections were found. Manually triggered.'
 argument-hint: 'Optional: topic or area to focus on (e.g. "new MCP tool", "API changes")'
 disable-model-invocation: true
 ---
 
 # Update Workspace Instructions
 
-Updates `.github/copilot-instructions.md` to reflect new knowledge, changed capabilities, or corrected conventions discovered in the current conversation.
+Updates `.github/copilot-instructions.md` and `README.md` to reflect new knowledge, changed capabilities, or corrected conventions discovered in the current conversation.
 
 ## When to Use
 
@@ -20,9 +20,9 @@ Trigger this skill (manually) after a conversation where:
 
 ## Procedure
 
-### 1. Read current instructions
+### 1. Read current files
 
-Read `.github/copilot-instructions.md` in full.
+Read `.github/copilot-instructions.md` and `README.md` in full (in parallel).
 
 ### 2. Extract lessons from conversation
 
@@ -47,7 +47,9 @@ Keep the diff minimal — only changes directly supported by the conversation.
 
 ### 4. Apply changes
 
-Edit `.github/copilot-instructions.md` using `replace_string_in_file`. Follow these rules:
+#### `.github/copilot-instructions.md`
+
+Edit using `replace_string_in_file`. Follow these rules:
 
 - The file is a **navigation map for AI**, not documentation — every line should help orient, not explain
 - Keep descriptions at the level of *what* a component does, not *how* it does it. If a detail belongs in code comments or a README, leave it out
@@ -56,6 +58,16 @@ Edit `.github/copilot-instructions.md` using `replace_string_in_file`. Follow th
 - Tool tables: add rows; don't rewrite existing rows unless they changed
 - **Skip** any tool, file, or feature whose name matches the pattern `s\d+e\d+` (e.g. `s01e01`, `s02e03`) — these are lesson/exercise artifacts, not project features
 - Preserve the **Link, don't embed** principle — reference files, don't copy their contents
+
+#### `README.md`
+
+Edit using `replace_string_in_file`. Follow these rules:
+
+- README is **user-facing** — write for a developer setting up or using the project, not for AI navigation
+- Keep the tool table (`| Tool | What it does |`) in sync with built-in and enabled MCP tools; add/remove rows as tools change
+- Update the **Project structure** section if directories were added or removed
+- Do not add implementation details — one-line descriptions only
+- **Skip** any tool, file, or feature whose name matches the pattern `s\d+e\d+`
 
 ### 5. Confirm
 
@@ -66,6 +78,7 @@ Report what was changed and why, referencing the specific conversation context t
 - [ ] Nothing added that wasn't discussed in the conversation
 - [ ] Every change is one line or less — no multi-sentence prose
 - [ ] Describes *what*, not *how* — no implementation details
-- [ ] Tool tables (`Built-in Tools`, `MCP Tools`) are up to date
+- [ ] Tool tables in both files are up to date
 - [ ] No duplicated information across sections
+- [ ] `copilot-instructions.md` changes use AI-navigation tone; `README.md` changes use user-facing tone
 - [ ] English only
