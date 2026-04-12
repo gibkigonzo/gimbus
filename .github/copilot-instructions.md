@@ -49,13 +49,18 @@ mcp.json           # MCP server declarations
 | `GET` | `/api/tools` | Tool catalog + default enabled names |
 | `PUT` | `/api/upload` | Upload file attachment for a chat (`chatId` in body) |
 | `DELETE` | `/api/upload/[...pathname]` | Delete a blob by pathname |
+| `GET` | `/api/files` | List all files from `files` table |
+| `DELETE` | `/api/files/[id]` | Delete file record + blob + playground files |
+| `GET` | `/api/blob/[...pathname]` | Serve a blob by pathname |
 
 ## Agent Loop (`server/utils/agent/`)
 
 - `core-loop.ts` — `runAgentLoopCore()`: iterates LLM → parse tool calls → execute in parallel → reinsert results → repeat. Accepts an `AbortSignal` passed down from the stream runner.
 - `stream-runner.ts` — wraps core loop in H3 SSE streaming; handles abort on client disconnect; saves new messages on completion via `onCompleted`
 - `tool-selection.ts` — `resolveToolsByAllowList()` filters the runtime catalog to what the request permits
-- `memory.ts` — `runObserver()` compresses unsealed messages into a memory log after 30k tokens; `runReflector()` compresses the log itself if it exceeds 240k chars. Both use `structuredChat()` with `gpt-4o-mini`.
+- `context.ts` — `buildContext()` builds LLM context array from DB messages; resolves image blobs inline
+- `history.ts` — `formatUserContent()` builds XML user message string; `stripUserContentXml()` recovers plain text for UI
+- `persist.ts` — `saveTurn()` persists user + assistant + tool messages after the loop completes
 
 ## Tool Runtime (`server/utils/tool-runtime/`, `server/plugins/`)
 
@@ -66,6 +71,9 @@ mcp.json           # MCP server declarations
 | Tool | File | Description |
 |------|------|-------------|
 | `manage_tasks` | `server/utils/tools/tasks.ts` | Per-session task list (add/complete/remove/list). State stored via `useStorage('tasks')` keyed by `chatId` |
+| `image_process` | `server/utils/tools/image-process.ts` | Apply image transforms (grayscale, bw, resize, rotate, format) to an uploaded blob; returns updated blob |
+| `analyze_image` | `server/utils/tools/analyze-image.ts` | Ask a targeted question about an uploaded image (uses `analyzeImageStructured`) |
+| `publish_for_download` | `server/utils/tools/publish-for-download.ts` | Publish a playground file to blob storage and return a download URL |
 
 ### MCP Tools
 
@@ -83,9 +91,10 @@ Configured in `mcp.json`. Currently active server: `filesystem` (scoped to `./pl
 
 Three tables (SQLite via Drizzle):
 
-- **`chats`**: `id`, `title`, `memoryLog`, `createdAt`
+- **`chats`**: `id`, `title`, `createdAt`
 - **`workflows`**: `id`, `name`, `result`, `completedAt`, `createdAt`
 - **`messages`**: `id`, `chatId` (FK cascade), `role` (user/assistant/system/tool), `content`, `model`, `inputTokens`, `outputTokens`, `cachedTokens`, `toolCalls` (JSON), `toolCallId`, `toolCalledWith` (JSON), `attachments` (JSON), `workflowId`, `sealed` (bool, default false), `createdAt`
+- **`files`**: `id`, `originalName`, `mediaType`, `pathname`, `playgroundPath`, `descriptionPath`, `description`, `size`, `createdAt`
 
 ## Frontend AI Features
 
@@ -118,8 +127,7 @@ Requires `OPENROUTER_API_KEY` in `.env`.
 - SSE chunk types are defined in `shared/types/agent-runtime.d.ts`; both server and client must use them consistently
 - The `playground/` directory is the sandboxed filesystem exposed to the MCP filesystem tool
 - **`playground/workflows/`** contains agent-readable `.md` files with cross-links; system prompt points to `./workflows/overview.md` as the entry point — do not dump full directory trees into context
-- **Observational Memory**: after `onCompleted`, if unsealed token sum > 30k, Observer runs fire-and-forget, seals processed messages, updates `chats.memoryLog`; log is injected into the system message as `<memory>...</memory>` via `buildHistory()`
-- **DB = LLM invariant**: user message content in DB is exactly what is sent to the LLM — `formatUserContent(message, files, mode)` builds the XML string once and it is saved to DB; `buildHistory` passes it unchanged; `stripUserContentXml` strips it for FE display only. Never transform content between DB save and LLM send — doing so breaks prefix cache on subsequent turns.
+- **DB = LLM invariant**: user message content in DB is exactly what is sent to the LLM — `formatUserContent(message, files?)` builds the XML string once and it is saved to DB; `buildContext` passes it unchanged; `stripUserContentXml` strips it for FE display only. Never transform content between DB save and LLM send — doing so breaks prefix cache on subsequent turns.
 - **System prompt is static**: never put dynamic data (date, model, file state) in the system prompt — it busts `cache_control: ephemeral`. Dynamic data goes in the user message
 - **User message XML format**: `[<attachments>…</attachments>\n]<message>\ntext\n</message>` — stored verbatim in `messages.content`; `attachments` column (JSON) kept separately for image blob resolution at send time
 - **Built-in tool state**: use `useStorage('tasks')` (Nitro KV) for ephemeral per-session state. Do not use module-level variables or add DB tables for transient tool state

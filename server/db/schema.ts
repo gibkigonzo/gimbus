@@ -39,8 +39,6 @@ export const messages = sqliteTable('messages', {
   toolCalls: text('tool_calls'),
   toolCallId: text('tool_call_id'),
   toolCalledWith: text('tool_called_with'),
-  memoryLog: text('memory_log'),
-  memoryLogFull: integer('memory_log_full', { mode: 'boolean' }),
   attachments: text('attachments'),
   workflowId: text('workflow_id').references(() => workflows.id),
   sealed: integer('sealed', { mode: 'boolean' }).notNull().default(false),

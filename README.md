@@ -30,12 +30,6 @@ Switch between models per conversation from a dropdown. All models routed via Op
 - **Gemini 3.1 Flash Lite Preview** — Google's lightweight flash model
 - **GPT-4o Mini** — balanced capability
 
-### Long-context memory
-After a conversation accumulates more than 30k tokens, an observer automatically compresses older messages into a `memoryLog` and injects it back as context — so the agent stays coherent over long sessions without blowing up the context window.
-
-### Planning mode
-Send a message in **Plan** mode to make the agent produce a structured plan before acting. Switch back to **Act** mode when ready to execute.
-
 ### Per-request tool selection
 A tool picker lets you enable or disable individual tools before sending a message. The selection is persisted in a cookie so it survives page reloads.
 
@@ -97,7 +91,7 @@ app/          # Vue frontend (Nuxt pages, composables, components)
 server/
   api/        # Nitro route handlers
   utils/
-    agent/    # Agent loop, SSE streaming, tool selection, memory
+    agent/    # Agent loop, SSE streaming, tool selection
     tools/    # Built-in tool implementations
     tool-runtime/  # Tool catalog (MCP + built-in merged)
     mcp-client.ts  # MCP server spawner
