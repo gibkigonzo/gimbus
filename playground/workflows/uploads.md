@@ -18,21 +18,16 @@ This shows one subdirectory per uploaded file. Each subdirectory contains the pr
 
 ### Text files and CSVs
 
-Available as plain text files inside `uploads/{fileId}/`. Small files (≤500 lines) are a single `.txt` file. Larger files are split into numbered chunks:
+Available as a single plain text file inside `uploads/{fileId}/`:
 
 ```text
 uploads/{fileId}/
-  document.txt              ← single file (≤500 lines)
-
-uploads/{fileId}/
-  report_chunk_001.txt      ← first 500 lines
-  report_chunk_002.txt      ← next 500 lines
-  ...
+  document.txt
 ```
 
-**Reading**: Use `read_text_file` on any chunk. For large files, use the `head` or `tail` parameters to read only the portion you need.
+**Reading**: Use `read_text_file` on the file. For large files, use the `head` or `tail` parameters to read only the portion you need.
 
-**Editing**: Use `edit_file` with `oldText`/`newText` patches. Edits apply to individual chunks — locate the right chunk first with `read_text_file`.
+**Editing**: Use `edit_file` with `oldText`/`newText` patches.
 
 ### Images
 
@@ -59,25 +54,16 @@ This image shows...
 
 ### PDFs
 
-Extracted text is chunked the same way as text files:
+Extracted text is stored as a single `.txt` file, the same as text files:
 
 ```text
 uploads/{fileId}/
-  document_chunk_001.txt
-  document_chunk_002.txt
-  ...
+  document.txt
 ```
-
-Use `read_text_file` with `head`/`tail` to navigate large documents efficiently.
 
 ## Providing files for download
 
-If the user wants to download an edited file (or a reassembled chunked file), use the download publication tool:
-
-- For a **single file**: pass the file path (e.g. `uploads/{fileId}/data.txt`)
-- For a **chunked file**: pass the directory path (e.g. `uploads/{fileId}/report`) — chunks are reassembled in order automatically
-
-The tool returns a URL the user can click to download.
+If the user wants to download an edited file, use the download publication tool with the file path (e.g. `uploads/{fileId}/data.txt`). The tool returns a URL the user can click to download.
 
 ## Cross-session availability
 

@@ -1,5 +1,6 @@
 import type OpenAI from 'openai'
 import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions'
+import type { LoopMessage, LoopContext } from '#shared/types/agent-runtime'
 
 interface ToolCallDelta {
   id: string
@@ -7,20 +8,23 @@ interface ToolCallDelta {
   argumentsRaw: string
 }
 
+const MAX_ITERATIONS = 60
+
 export async function runAgentLoopCore(
   pushSse: (chunk: SseChunk) => Promise<void> | void,
-  initialMessages: ChatCompletionMessageParam[],
+  context: LoopContext,
   tools: ChatCompletionTool[],
-  handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>>,
-  model = 'openai/gpt-4o-mini',
-  maxIterations = 30,
-  onAssistantUsage?: (usage: AssistantUsage | null) => void,
+  handlers: Record<string, (args: Record<string, unknown>, model: string) => Promise<unknown>>,
+  model: string,
   signal?: AbortSignal
-): Promise<ChatCompletionMessageParam[]> {
+): Promise<AgentLoopResult> {
   const client = createOpenRouter()
-  const messages: ChatCompletionMessageParam[] = [...initialMessages]
+  const messages: ChatCompletionMessageParam[] = [...context.messages]
 
-  for (let iteration = 0; iteration < maxIterations; iteration++) {
+  const usagePerTurn: (AssistantUsage | null)[] = []
+  const generatedMessages: LoopMessage[] = []
+
+  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     if (signal?.aborted) break
     let assistantContent = ''
     const toolCallsMap: Record<string, ToolCallDelta> = {}
@@ -28,7 +32,7 @@ export async function runAgentLoopCore(
 
     const streamParams: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
       model,
-      messages: messages,
+      messages,
       stream: true,
       stream_options: { include_usage: true },
       ...(tools.length > 0 ? { tools } : {})
@@ -46,9 +50,9 @@ export async function runAgentLoopCore(
               if (!toolCallsMap[idx]) {
                 toolCallsMap[idx] = { id: tc.id ?? '', name: tc.function?.name ?? '', argumentsRaw: tc.function?.arguments ?? '' }
               } else {
-                toolCallsMap[idx].id = toolCallsMap[idx]!.id + (tc.id ?? '')
-                toolCallsMap[idx].name = toolCallsMap[idx]!.name + (tc.function?.name ?? '')
-                toolCallsMap[idx].argumentsRaw = toolCallsMap[idx]!.argumentsRaw + (tc.function?.arguments ?? '')
+                toolCallsMap[idx]!.id += tc.id ?? ''
+                toolCallsMap[idx]!.name += tc.function?.name ?? ''
+                toolCallsMap[idx]!.argumentsRaw += tc.function?.arguments ?? ''
               }
             }
           } else if (delta.content) {
@@ -77,9 +81,9 @@ export async function runAgentLoopCore(
     if (iterationUsage) {
       await pushSse({ type: 'usage', ...iterationUsage, model })
     }
-    onAssistantUsage?.(iterationUsage)
+    usagePerTurn.push(iterationUsage)
 
-    const assistantMessage: ChatCompletionMessageParam = toolCalls.length > 0
+    const assistantMessage: LoopMessage = toolCalls.length > 0
       ? {
           role: 'assistant',
           content: assistantContent || null,
@@ -91,13 +95,14 @@ export async function runAgentLoopCore(
         }
       : { role: 'assistant', content: assistantContent }
 
-    messages.push(assistantMessage)
+    messages.push(assistantMessage as ChatCompletionMessageParam)
+    generatedMessages.push(assistantMessage)
 
     if (toolCalls.length === 0) {
       break
     }
 
-    const toolResults = await Promise.all(
+    const toolResults: LoopMessage[] = await Promise.all(
       toolCalls.map(async (tc) => {
         const handler = handlers[tc.name]
         let result: unknown
@@ -106,8 +111,7 @@ export async function runAgentLoopCore(
         } else {
           try {
             console.log(`[agent] Calling tool '${tc.name}' with arguments:`, tc.argumentsRaw)
-            const args = JSON.parse(tc.argumentsRaw) as Record<string, unknown>
-            result = await handler(args)
+            result = await handler(JSON.parse(tc.argumentsRaw) as Record<string, unknown>, model)
           } catch (err: unknown) {
             console.error(`[agent] Error calling tool '${tc.name}'`, err)
             result = { error: (err as Error).message }
@@ -124,16 +128,16 @@ export async function runAgentLoopCore(
           role: 'tool' as const,
           tool_call_id: tc.id,
           content: JSON.stringify(result),
-          toolName: tc.name,
           toolCalledWith: tc.argumentsRaw,
           workflowId
-        }
+        } satisfies LoopMessage
       })
     )
 
-    messages.push(...toolResults)
+    messages.push(...toolResults as ChatCompletionMessageParam[])
+    generatedMessages.push(...toolResults)
   }
 
   await pushSse({ type: 'done' })
-  return messages
+  return { messages: generatedMessages, usagePerTurn }
 }

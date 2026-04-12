@@ -4,9 +4,10 @@ import { manageTasksTool, handleManageTasks } from '../tools/tasks'
 import { imageProcessTool, handleImageProcess } from '../tools/image-process'
 import { analyzeImageTool, handleAnalyzeImage } from '../tools/analyze-image'
 import { publishForDownloadTool, handlePublishForDownload } from '../tools/publish-for-download'
+import { verifyLogsTool, handleVerifyLogs } from '../tools/verify-logs'
 
 export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
-  const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {}
+  const handlers: Record<string, (args: Record<string, unknown>, model: string) => Promise<unknown>> = {}
   const toolsByName = new Map<string, OpenAI.Chat.Completions.ChatCompletionTool>()
   const catalog: ToolCatalogItem[] = []
 
@@ -14,7 +15,7 @@ export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
     sourceType: ToolSourceType,
     sourceName: string,
     tool: OpenAI.Chat.Completions.ChatCompletionTool,
-    handler: (args: Record<string, unknown>) => Promise<unknown>,
+    handler: (args: Record<string, unknown>, model: string) => Promise<unknown>,
     enabledByDefault: boolean
   ) => {
     const toolName = tool.function.name
@@ -39,6 +40,7 @@ export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
   registerTool('builtin', 'built-in', imageProcessTool, handleImageProcess, true)
   registerTool('builtin', 'built-in', analyzeImageTool, handleAnalyzeImage, true)
   registerTool('builtin', 'built-in', publishForDownloadTool, handlePublishForDownload, true)
+  registerTool('builtin', 'built-in', verifyLogsTool, handleVerifyLogs, true)
 
   const mcp = await createMcpTools()
   for (const mcpTool of mcp.tools) {

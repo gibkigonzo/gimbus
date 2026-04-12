@@ -1,0 +1,1 @@
+ALTER TABLE `messages` ADD `memory_log` text;

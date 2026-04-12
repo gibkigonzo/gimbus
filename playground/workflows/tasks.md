@@ -13,6 +13,7 @@ Use the task management tool (if available) to track work within a session. Task
 - Write task titles as concrete actions: "Read overview.md", "Write research summary", not "Handle research"
 - Add all known steps before starting the first one
 - Mark each step complete immediately after finishing it — not at the end
+- **Always include a `result` when completing a task**: what file was created and where, what value was found, what the verification outcome was. Be specific — vague results are useless.
 - If a task spawns subtasks, list them before working on them
 
 ## Long-running work (across sessions)

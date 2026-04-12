@@ -38,7 +38,7 @@ export const analyzeImageTool: ChatCompletionTool = {
   }
 }
 
-export async function handleAnalyzeImage(rawArgs: Record<string, unknown>): Promise<unknown> {
+export async function handleAnalyzeImage(rawArgs: Record<string, unknown>, model: string): Promise<unknown> {
   const args = argsSchema.parse(rawArgs)
 
   const blobData = await blob.get(args.pathname)
@@ -64,7 +64,7 @@ export async function handleAnalyzeImage(rawArgs: Record<string, unknown>): Prom
     dataUrl,
     args.question,
     ResultSchema,
-    'openai/gpt-4o-mini'
+    model
   )
 
   return { result }

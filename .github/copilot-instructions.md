@@ -45,7 +45,7 @@ mcp.json           # MCP server declarations
 | `POST` | `/api/chats` | Create chat with first user message |
 | `GET` | `/api/chats/[id]` | Fetch chat + messages (AgentMessage format) |
 | `DELETE` | `/api/chats/[id]` | Delete chat and its blob files |
-| `POST` | `/api/chats/[id]` | **Stream agent loop** for next turn; accepts optional `mode: 'plan' \| 'act'` |
+| `POST` | `/api/chats/[id]` | **Stream agent loop** for next turn;
 | `GET` | `/api/tools` | Tool catalog + default enabled names |
 | `PUT` | `/api/upload` | Upload file attachment for a chat (`chatId` in body) |
 | `DELETE` | `/api/upload/[...pathname]` | Delete a blob by pathname |
@@ -121,7 +121,6 @@ Requires `OPENROUTER_API_KEY` in `.env`.
 - **Observational Memory**: after `onCompleted`, if unsealed token sum > 30k, Observer runs fire-and-forget, seals processed messages, updates `chats.memoryLog`; log is injected into the system message as `<memory>...</memory>` via `buildHistory()`
 - **DB = LLM invariant**: user message content in DB is exactly what is sent to the LLM — `formatUserContent(message, files, mode)` builds the XML string once and it is saved to DB; `buildHistory` passes it unchanged; `stripUserContentXml` strips it for FE display only. Never transform content between DB save and LLM send — doing so breaks prefix cache on subsequent turns.
 - **System prompt is static**: never put dynamic data (date, model, file state) in the system prompt — it busts `cache_control: ephemeral`. Dynamic data goes in the user message
-- **User message XML format**: `[<mode>…</mode>\n][<attachments>…</attachments>\n]<message>\ntext\n</message>` — stored verbatim in `messages.content`; `attachments` column (JSON) kept separately for image blob resolution at send time
-- **Planning mode**: pass `mode: 'plan'` in the request body; `formatUserContent` prepends `<mode>planning…</mode>` to the XML — it is stored in DB and sent to LLM unchanged
+- **User message XML format**: `[<attachments>…</attachments>\n]<message>\ntext\n</message>` — stored verbatim in `messages.content`; `attachments` column (JSON) kept separately for image blob resolution at send time
 - **Built-in tool state**: use `useStorage('tasks')` (Nitro KV) for ephemeral per-session state. Do not use module-level variables or add DB tables for transient tool state
 - **Structured LLM output**: when an LLM call must return typed/validated data, use `structuredChat(messages, ZodSchema, model)` from `server/utils/openrouter.ts` (backed by Instructor). For image input, use `analyzeImageStructured(dataUrl, prompt, ZodSchema, model)`. Never parse raw completion text manually.

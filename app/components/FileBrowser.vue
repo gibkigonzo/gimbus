@@ -29,8 +29,7 @@ function toggleSelect(file: FileRecord) {
     mediaType: file.mediaType,
     pathname: file.pathname,
     fileId: file.id,
-    playgroundPath: file.playgroundPath ?? undefined,
-    isChunked: file.isChunked
+    playgroundPath: file.playgroundPath ?? undefined
   }
 
   if (isSelected(file)) {

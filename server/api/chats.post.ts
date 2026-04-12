@@ -7,8 +7,7 @@ const fileAttachmentSchema = z.object({
   mediaType: z.string(),
   pathname: z.string(),
   fileId: z.string().optional(),
-  playgroundPath: z.string().optional(),
-  isChunked: z.boolean().optional()
+  playgroundPath: z.string().optional()
 })
 
 export default defineEventHandler(async (event) => {

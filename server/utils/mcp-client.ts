@@ -40,7 +40,7 @@ interface McpContentPart {
 
 export interface McpToolset {
   tools: McpRuntimeTool[]
-  handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>>
+  handlers: Record<string, (args: Record<string, unknown>, model: string) => Promise<unknown>>
   close: () => Promise<void>
 }
 
@@ -58,7 +58,7 @@ export async function createMcpTools(): Promise<McpToolset> {
   const config: McpConfig = JSON.parse(raw)
 
   const allTools: McpRuntimeTool[] = []
-  const allHandlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {}
+  const allHandlers: Record<string, (args: Record<string, unknown>, model: string) => Promise<unknown>> = {}
   const clients: McpClientRef[] = []
 
   for (const [serverName, serverConfig] of Object.entries(config.mcpServers)) {
@@ -110,7 +110,7 @@ export async function createMcpTools(): Promise<McpToolset> {
     const allowedNames = new Set(openAiTools.map(t => t.function.name))
     for (const tool of mcpTools) {
       if (!allowedNames.has(tool.name)) continue
-      allHandlers[tool.name] = async (args: Record<string, unknown>) => {
+      allHandlers[tool.name] = async (args: Record<string, unknown>, _model: string) => {
         const result = await client.callTool({ name: tool.name, arguments: args })
         const parts = result.content as McpContentPart[]
         return parts.map(p => p.text ?? p.data ?? '').join('\n')

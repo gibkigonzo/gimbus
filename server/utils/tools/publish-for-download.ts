@@ -13,13 +13,13 @@ export const publishForDownloadTool: ChatCompletionTool = {
   type: 'function',
   function: {
     name: 'publish_for_download',
-    description: 'Publish a file (or reassembled chunked file) from the playground to blob storage and return a download URL. For chunked files, pass the directory path (e.g. "playground/uploads/{fileId}/mydoc") and the tool will reassemble all chunks in order. For a single file, pass the full path (e.g. "playground/uploads/{fileId}/data.txt").',
+    description: 'Publish a file from the playground to blob storage and return a download URL.',
     parameters: {
       type: 'object',
       properties: {
         playground_path: {
           type: 'string',
-          description: 'Path within the playground directory. Must start with "playground/uploads/". For chunked files, pass the directory. For single files, pass the file path.'
+          description: 'Path to the file within the playground directory. Must start with "playground/uploads/".'
         },
         filename: {
           type: 'string',
@@ -31,7 +31,7 @@ export const publishForDownloadTool: ChatCompletionTool = {
   }
 }
 
-export async function handlePublishForDownload(rawArgs: Record<string, unknown>): Promise<unknown> {
+export async function handlePublishForDownload(rawArgs: Record<string, unknown>, _model: string): Promise<unknown> {
   const args = argsSchema.parse(rawArgs)
 
   // Security: path traversal protection — strip optional "playground/" prefix
@@ -51,30 +51,12 @@ export async function handlePublishForDownload(rawArgs: Record<string, unknown>)
 
   const stat = await fs.stat(targetAbs).catch(() => null)
 
-  if (stat?.isDirectory()) {
-    // Chunked: find all _chunk_NNN.txt files, sort, concat
-    const entries = await fs.readdir(targetAbs)
-    const chunkFiles = entries
-      .filter(e => e.match(/_chunk_\d+\.txt$/))
-      .sort()
+  if (!stat?.isFile()) {
+    throw new Error(`File not found in playground: ${normalized}`)
+  }
 
-    if (chunkFiles.length === 0) {
-      throw new Error(`No chunk files found in directory: ${normalized}`)
-    }
-
-    const parts = await Promise.all(
-      chunkFiles.map(f => fs.readFile(path.join(targetAbs, f), 'utf-8'))
-    )
-    content = Buffer.from(parts.join('\n'), 'utf-8')
-    outputFilename = args.filename ?? (path.basename(normalized) + '.txt')
-  }
-  else if (stat?.isFile()) {
-    content = await fs.readFile(targetAbs)
-    outputFilename = args.filename ?? path.basename(normalized)
-  }
-  else {
-    throw new Error(`Path not found in playground: ${normalized}`)
-  }
+  content = await fs.readFile(targetAbs)
+  outputFilename = args.filename ?? path.basename(normalized)
 
   const downloadId = crypto.randomUUID()
   const result = await blob.put(`downloads/${downloadId}/${outputFilename}`, content, {

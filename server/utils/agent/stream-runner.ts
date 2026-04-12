@@ -6,11 +6,12 @@ export function runStreamingAgentLoop(options: StreamingAgentLoopOptions) {
   const eventStream = createEventStream(options.event)
   const runtime = options.event.context.$toolRuntime
   const abortController = new AbortController()
-  options.event.node.req.on('close', () => abortController.abort())
+  options.event.node.req.on('close', () => {
+    console.log('Client disconnected, aborting agent loop')
+    abortController.abort()
+  })
 
   async function runProcessing() {
-    const usagePerTurn: (AssistantUsage | null)[] = []
-
     try {
       const { tools, handlers } = resolveToolsByAllowList(
         runtime.tools,
@@ -19,22 +20,17 @@ export function runStreamingAgentLoop(options: StreamingAgentLoopOptions) {
         options.allowTools
       )
 
-      const finalMessages = await runAgentLoopCore(
+      const result = await runAgentLoopCore(
         chunk => eventStream.push(JSON.stringify(chunk)),
-        options.initialMessages,
+        options.context,
         tools,
         handlers,
         options.model,
-        options.maxIterations ?? 15,
-        usage => usagePerTurn.push(usage),
         abortController.signal
       )
 
       if (!abortController.signal.aborted) {
-        options.onCompleted?.({
-          finalMessages,
-          usagePerTurn,
-        })
+        await options.onCompleted?.(result)
       }
     } catch (err: unknown) {
       if (!abortController.signal.aborted) {

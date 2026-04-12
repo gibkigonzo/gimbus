@@ -2,12 +2,12 @@ import type { ChatCompletionTool } from 'openai/resources/chat/completions'
 
 interface ResolvedToolSelection {
   tools: ChatCompletionTool[]
-  handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>>
+  handlers: Record<string, (args: Record<string, unknown>, model: string) => Promise<unknown>>
 }
 
 export function resolveToolsByAllowList(
   allTools: ChatCompletionTool[],
-  allHandlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>>,
+  allHandlers: Record<string, (args: Record<string, unknown>, model: string) => Promise<unknown>>,
   defaultEnabledToolNames: string[],
   allowTools?: string[]
 ): ResolvedToolSelection {

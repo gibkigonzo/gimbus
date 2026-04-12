@@ -30,19 +30,12 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Delete playground text files (single file or chunked directory)
+  // Delete playground text/description file
   if (file.playgroundPath) {
     const targetAbs = path.join(playgroundRoot, file.playgroundPath)
-    if (file.isChunked) {
-      await fs.rm(targetAbs, { recursive: true, force: true }).catch(err =>
-        console.error('[delete-file] Failed to delete chunk dir:', targetAbs, err)
-      )
-    }
-    else {
-      await fs.unlink(targetAbs).catch(err => {
-        if (err.code !== 'ENOENT') console.error('[delete-file] Failed to delete file:', targetAbs, err)
-      })
-    }
+    await fs.unlink(targetAbs).catch(err => {
+      if (err.code !== 'ENOENT') console.error('[delete-file] Failed to delete file:', targetAbs, err)
+    })
   }
 
   await db.delete(schema.files).where(eq(schema.files.id, id))

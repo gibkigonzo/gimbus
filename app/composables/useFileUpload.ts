@@ -4,7 +4,6 @@ interface UploadedFileRecord {
   mediaType: string
   originalName: string
   playgroundPath: string | null
-  isChunked: boolean
   descriptionPath: string | null
   description: string | null
   size: number
@@ -65,8 +64,7 @@ export function useFileUploadWithStatus() {
           status: 'uploaded',
           uploadedPathname: result.pathname,
           uploadedFileId: result.fileId,
-          uploadedPlaygroundPath: result.playgroundPath,
-          uploadedIsChunked: result.isChunked
+          uploadedPlaygroundPath: result.playgroundPath
         }
       } catch (error) {
         const errorMessage = (error as { data?: { message?: string } }).data?.message
@@ -107,8 +105,7 @@ export function useFileUploadWithStatus() {
         mediaType: f.file.type,
         pathname: f.uploadedPathname!,
         fileId: f.uploadedFileId,
-        playgroundPath: f.uploadedPlaygroundPath ?? undefined,
-        isChunked: f.uploadedIsChunked
+        playgroundPath: f.uploadedPlaygroundPath ?? undefined
       }))
   )
 

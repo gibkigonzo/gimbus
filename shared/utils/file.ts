@@ -6,7 +6,6 @@ export interface FileWithStatus {
   uploadedPathname?: string
   uploadedFileId?: string
   uploadedPlaygroundPath?: string | null
-  uploadedIsChunked?: boolean
   error?: string
 }
 
@@ -16,7 +15,6 @@ export interface FileAttachment {
   pathname: string
   fileId?: string
   playgroundPath?: string
-  isChunked?: boolean
 }
 
 export const FILE_UPLOAD_CONFIG = {

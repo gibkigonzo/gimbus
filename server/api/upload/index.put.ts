@@ -4,8 +4,8 @@ import sharp from 'sharp'
 import { extractText } from 'unpdf'
 import path from 'node:path'
 import { z } from 'zod'
-import { chunkAndWriteText } from '../../utils/chunk-text'
 import { analyzeImageStructured } from '../../utils/openrouter'
+import { removeRandomSuffix } from '#shared/utils/file'
 import fs from 'node:fs/promises'
 
 const MAX_VISION_BYTES = 2 * 1024 * 1024 // 2 MB
@@ -16,6 +16,10 @@ const ImageDescriptionSchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
+  const model = getCookie(event, 'model')
+  if (!model) {
+    throw createError({ statusCode: 400, message: 'model cookie is required' })
+  }
   const fileId = crypto.randomUUID()
 
   const result = await blob.handleUpload(event, {
@@ -38,10 +42,10 @@ export default defineEventHandler(async (event) => {
       const mediaType: string = obj.contentType ?? 'application/octet-stream'
       const originalName = path.basename(obj.pathname)
       const baseName = path.basename(originalName, path.extname(originalName))
+      const cleanBaseName = removeRandomSuffix(baseName)
       const playgroundDir = `playground/uploads/${fileId}`
 
       let playgroundPath: string | null = null
-      let isChunked = false
       let descriptionPath: string | null = null
       let description: string | null = null
 
@@ -50,9 +54,10 @@ export default defineEventHandler(async (event) => {
           const blobData = await blob.get(obj.pathname)
           if (blobData) {
             const text = await blobData.text()
-            const result = await chunkAndWriteText(text, playgroundDir, baseName)
-            playgroundPath = result.playgroundPath
-            isChunked = result.isChunked
+            await fs.mkdir(playgroundDir, { recursive: true })
+            const filePath = `${playgroundDir}/${cleanBaseName}.txt`
+            await fs.writeFile(filePath, text, 'utf-8')
+            playgroundPath = filePath
             description = text.slice(0, 200) || null
           }
         }
@@ -75,16 +80,16 @@ export default defineEventHandler(async (event) => {
               dataUrl,
               'Describe this image in detail. Include what is shown, colors, text (if any), layout, and any notable elements.',
               ImageDescriptionSchema,
-              'openai/gpt-4o-mini'
+              model
             )
 
             await fs.mkdir(playgroundDir, { recursive: true })
-            const descFile = `${playgroundDir}/${baseName}.description.md`
+            const descFile = `${playgroundDir}/${cleanBaseName}.description.md`
             const frontmatter = `---\nblob_pathname: ${obj.pathname}\nmediaType: ${mediaType}\n---\n${desc}`
             await fs.writeFile(descFile, frontmatter, 'utf-8')
 
             descriptionPath = null
-            playgroundPath = `playground/uploads/${fileId}/${baseName}.description.md`
+            playgroundPath = `playground/uploads/${fileId}/${cleanBaseName}.description.md`
             description = desc.slice(0, 200)
           }
         }
@@ -94,9 +99,10 @@ export default defineEventHandler(async (event) => {
             const buffer = Buffer.from(await blobData.arrayBuffer())
             const { text } = await extractText(buffer, { mergePages: true })
             const fullText = Array.isArray(text) ? text.join('\n') : (text ?? '')
-            const result = await chunkAndWriteText(fullText, playgroundDir, baseName)
-            playgroundPath = result.playgroundPath
-            isChunked = result.isChunked
+            await fs.mkdir(playgroundDir, { recursive: true })
+            const filePath = `${playgroundDir}/${cleanBaseName}.txt`
+            await fs.writeFile(filePath, fullText, 'utf-8')
+            playgroundPath = filePath
             description = fullText.slice(0, 200) || null
           }
         }
@@ -111,7 +117,6 @@ export default defineEventHandler(async (event) => {
         mediaType,
         pathname: obj.pathname,
         playgroundPath: playgroundPath ?? null,
-        isChunked,
         descriptionPath: descriptionPath ?? null,
         description: description ?? null,
         size: obj.size ?? 0
@@ -123,7 +128,6 @@ export default defineEventHandler(async (event) => {
         mediaType,
         originalName,
         playgroundPath,
-        isChunked,
         description: description ?? null,
         size: obj.size ?? 0
       }

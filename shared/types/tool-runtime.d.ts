@@ -12,7 +12,7 @@ export interface ToolCatalogItem {
 
 export interface ToolRuntimeState {
   tools: OpenAI.Chat.Completions.ChatCompletionTool[]
-  handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>>
+  handlers: Record<string, (args: Record<string, unknown>, model: string) => Promise<unknown>>
   catalog: ToolCatalogItem[]
   defaultEnabledToolNames: string[]
   close: () => Promise<void>

@@ -26,6 +26,7 @@
     "@vueuse/core": "^14.2.1",
     "date-fns": "^4.1.0",
     "drizzle-orm": "^0.45.1",
+    "gpt-tokenizer": "^3.4.0",
     "motion-v": "^1.10.3",
     "nuxt": "^4.4.2",
     "nuxt-charts": "^2.1.3",

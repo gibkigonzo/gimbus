@@ -4,7 +4,6 @@ export interface FileRecord {
   mediaType: string
   pathname: string
   playgroundPath: string | null
-  isChunked: boolean
   descriptionPath: string | null
   description: string | null
   size: number

@@ -14,7 +14,7 @@ export function createOpenRouter() {
 export async function structuredChat<S extends ZodObject<ZodRawShape>>(
   messages: ChatCompletionMessageParam[],
   schema: S,
-  model = 'openai/gpt-4o-mini'
+  model: string
 ): Promise<z.infer<S>> {
   const client = createOpenRouter()
   const instructor = Instructor({ client, mode: 'TOOLS' })
@@ -29,7 +29,7 @@ export async function analyzeImageStructured<S extends ZodObject<ZodRawShape>>(
   imageDataUrl: string,
   prompt: string,
   schema: S,
-  model = 'openai/gpt-4o-mini'
+  model: string
 ): Promise<z.infer<S>> {
   const messages: ChatCompletionMessageParam[] = [
     {

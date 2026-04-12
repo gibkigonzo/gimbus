@@ -8,7 +8,6 @@ const timestamps = {
 export const chats = sqliteTable('chats', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   title: text('title'),
-  memoryLog: text('memory_log'),
   ...timestamps
 })
 
@@ -40,6 +39,8 @@ export const messages = sqliteTable('messages', {
   toolCalls: text('tool_calls'),
   toolCallId: text('tool_call_id'),
   toolCalledWith: text('tool_called_with'),
+  memoryLog: text('memory_log'),
+  memoryLogFull: integer('memory_log_full', { mode: 'boolean' }),
   attachments: text('attachments'),
   workflowId: text('workflow_id').references(() => workflows.id),
   sealed: integer('sealed', { mode: 'boolean' }).notNull().default(false),
@@ -65,7 +66,6 @@ export const files = sqliteTable('files', {
   mediaType: text('media_type').notNull(),
   pathname: text('pathname').notNull(),
   playgroundPath: text('playground_path'),
-  isChunked: integer('is_chunked', { mode: 'boolean' }).notNull().default(false),
   descriptionPath: text('description_path'),
   description: text('description'),
   size: integer('size').notNull(),

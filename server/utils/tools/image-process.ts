@@ -94,7 +94,7 @@ export const imageProcessTool: ChatCompletionTool = {
   }
 }
 
-export async function handleImageProcess(rawArgs: Record<string, unknown>): Promise<unknown> {
+export async function handleImageProcess(rawArgs: Record<string, unknown>, _model: string): Promise<unknown> {
   const args = argsSchema.parse(rawArgs)
 
   const sourceBlob = await blob.get(args.pathname)
