@@ -8,16 +8,13 @@ Mark each step complete as you finish it, not at the end.
 The task list is your source of truth for what remains; keep it accurate and up to date.
 
 Never start executing before you have a plan. Decomposition is always the first step.
+When adding a new task, briefly note what you are currently working on — this preserves intent and helps reconstruct decisions when resuming sessions.
 
 ## Exploration
 
-When answering questions that require information from the workflow:
-1. Scan the overall structure first to understand what is available
-2. Deepen your search using keywords, patterns, and targeted queries
-3. Explore related topics you may not have initially considered
-4. Verify you have sufficient coverage before composing the final answer
-
-Do not stop after the first result — verify your findings and look for contradictions.
+When answering questions that require information from the workflow, scan the overall structure first to understand what is available before diving into details.
+Broaden your search using keywords, patterns, and related topics you may not have initially considered.
+Do not stop after the first result — verify your findings and look for contradictions before composing the final answer.
 
 ## General
 

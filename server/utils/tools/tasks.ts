@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { ChatCompletionTool } from 'openai/resources/chat/completions'
 
 interface Task {
@@ -5,16 +6,49 @@ interface Task {
   description: string
   status: 'pending' | 'done'
   result?: string
+  createdAt: string
+  chatId: string
+  context?: string
+}
+
+interface TaskStore {
+  version: string
+  tasks: Task[]
+  updatedAt: string
 }
 
 const STORAGE_PREFIX = 'tasks'
 
-async function getTasks(sessionId: string): Promise<Task[]> {
-  return (await useStorage(STORAGE_PREFIX).getItem<Task[]>(sessionId)) ?? []
+function computeVersion(tasks: Task[]): string {
+  return createHash('sha256').update(JSON.stringify(tasks)).digest('hex').slice(0, 8)
 }
 
-async function setTasks(sessionId: string, tasks: Task[]): Promise<void> {
-  await useStorage(STORAGE_PREFIX).setItem(sessionId, tasks)
+async function getTaskStore(sessionId: string): Promise<TaskStore> {
+  const stored = await useStorage(STORAGE_PREFIX).getItem<TaskStore>(sessionId)
+  if (stored && typeof stored === 'object' && 'version' in stored && 'tasks' in stored) {
+    return stored
+  }
+  // Legacy or missing: initialize empty store
+  const tasks: Task[] = []
+  return { version: computeVersion(tasks), tasks, updatedAt: '' }
+}
+
+type SetResult =
+  | { conflict: false }
+  | { conflict: true; currentStore: TaskStore }
+
+async function setTaskStore(sessionId: string, newTasks: Task[], expectedVersion: string): Promise<SetResult> {
+  const current = await getTaskStore(sessionId)
+  if (current.version !== expectedVersion) {
+    return { conflict: true, currentStore: current }
+  }
+  const store: TaskStore = {
+    version: computeVersion(newTasks),
+    tasks: newTasks,
+    updatedAt: new Date().toISOString(),
+  }
+  await useStorage(STORAGE_PREFIX).setItem(sessionId, store)
+  return { conflict: false }
 }
 
 export const manageTasksTool: ChatCompletionTool = {
@@ -46,6 +80,10 @@ export const manageTasksTool: ChatCompletionTool = {
         result: {
           type: 'string',
           description: 'Outcome of the completed task — what was created, found, or verified (required for "complete"). Be specific: include file paths, found values, or check results.'
+        },
+        context: {
+          type: 'string',
+          description: 'Short description of what you are currently working on (optional, used with "add"). Helps reconstruct provenance when resuming old sessions.'
         }
       },
       required: ['session_id', 'operation']
@@ -57,7 +95,8 @@ export async function handleManageTasks(args: Record<string, unknown>, _model: s
   const sessionId = String(args.session_id ?? '')
   const operation = String(args.operation ?? 'list')
 
-  const tasks = await getTasks(sessionId)
+  const store = await getTaskStore(sessionId)
+  const tasks = store.tasks
 
   if (operation === 'list') {
     return { tasks }
@@ -71,29 +110,39 @@ export async function handleManageTasks(args: Record<string, unknown>, _model: s
       return { error: `Complete the current pending task (id=${pending[0]!.id}: "${pending[0]!.description}") before adding a new one.`, tasks }
     }
     const id = tasks.length > 0 ? Math.max(...tasks.map(t => t.id)) + 1 : 1
-    tasks.push({ id, description, status: 'pending' })
-    await setTasks(sessionId, tasks)
-    return { tasks }
+    const context = args.context ? String(args.context).trim() : undefined
+    const newTasks = [...tasks, { id, description, status: 'pending' as const, createdAt: new Date().toISOString(), chatId: sessionId, context }]
+    const writeResult = await setTaskStore(sessionId, newTasks, store.version)
+    if (writeResult.conflict) {
+      return { error: 'Conflict: task list was concurrently modified. Re-list and retry.', tasks: writeResult.currentStore.tasks }
+    }
+    return { tasks: newTasks }
   }
 
   if (operation === 'complete') {
     const taskId = Number(args.task_id)
-    const task = tasks.find(t => t.id === taskId)
-    if (!task) return { error: `Task ${taskId} not found` }
-    task.status = 'done'
-    const result = args.result ? String(args.result).trim() : undefined
-    if (result) task.result = result
-    await setTasks(sessionId, tasks)
-    return { tasks }
+    const newTasks = tasks.map(t => {
+      if (t.id !== taskId) return t
+      const result = args.result ? String(args.result).trim() : undefined
+      return { ...t, status: 'done' as const, ...(result ? { result } : {}) }
+    })
+    if (!tasks.some(t => t.id === taskId)) return { error: `Task ${taskId} not found` }
+    const writeResult = await setTaskStore(sessionId, newTasks, store.version)
+    if (writeResult.conflict) {
+      return { error: 'Conflict: task list was concurrently modified. Re-list and retry.', tasks: writeResult.currentStore.tasks }
+    }
+    return { tasks: newTasks }
   }
 
   if (operation === 'remove') {
     const taskId = Number(args.task_id)
-    const idx = tasks.findIndex(t => t.id === taskId)
-    if (idx === -1) return { error: `Task ${taskId} not found` }
-    tasks.splice(idx, 1)
-    await setTasks(sessionId, tasks)
-    return { tasks }
+    if (!tasks.some(t => t.id === taskId)) return { error: `Task ${taskId} not found` }
+    const newTasks = tasks.filter(t => t.id !== taskId)
+    const writeResult = await setTaskStore(sessionId, newTasks, store.version)
+    if (writeResult.conflict) {
+      return { error: 'Conflict: task list was concurrently modified. Re-list and retry.', tasks: writeResult.currentStore.tasks }
+    }
+    return { tasks: newTasks }
   }
 
   return { error: `Unknown operation: ${operation}` }
