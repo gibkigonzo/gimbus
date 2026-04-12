@@ -4,6 +4,7 @@ import { manageTasksTool, handleManageTasks } from '../tools/tasks'
 import { imageProcessTool, handleImageProcess } from '../tools/image-process'
 import { analyzeImageTool, handleAnalyzeImage } from '../tools/analyze-image'
 import { publishForDownloadTool, handlePublishForDownload } from '../tools/publish-for-download'
+import { delegateTool, createDelegateHandler } from '../tools/delegate'
 
 export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
   const handlers: Record<string, (args: Record<string, unknown>, model: string) => Promise<unknown>> = {}
@@ -46,6 +47,10 @@ export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
     if (!handler) continue
     registerTool('mcp', mcpTool.sourceName, mcpTool.tool, handler, mcpTool.enabledByDefault)
   }
+
+  // delegate must be registered last — its handler closes over the complete handlers + tools maps
+  const delegateHandler = createDelegateHandler(handlers, Array.from(toolsByName.values()))
+  registerTool('builtin', 'built-in', delegateTool, delegateHandler, false)
 
   return {
     tools: Array.from(toolsByName.values()),

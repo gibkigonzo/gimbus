@@ -49,7 +49,6 @@ export interface LoopMessage {
   tool_call_id?: string
   // metadata carried through the loop, not sent to the API
   toolCalledWith?: string
-  workflowId?: string
 }
 
 export interface AgentLoopResult {

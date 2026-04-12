@@ -41,7 +41,6 @@ export async function saveTurn(
         content: typeof msg.content === 'string' ? msg.content : null,
         toolCallId: msg.tool_call_id ?? null,
         toolCalledWith: msg.toolCalledWith ?? null,
-        workflowId: msg.workflowId ?? null,
         model,
       })
     }

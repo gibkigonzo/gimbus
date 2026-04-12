@@ -120,16 +120,11 @@ export async function runAgentLoopCore(
 
         await pushSse({ type: 'tool-result', toolName: tc.name, result, model, toolCalledWith: tc.argumentsRaw })
 
-        const workflowId = (result != null && typeof result === 'object' && 'workflowId' in result)
-          ? (result as Record<string, unknown>).workflowId as string
-          : undefined
-
         return {
           role: 'tool' as const,
           tool_call_id: tc.id,
           content: JSON.stringify(result),
           toolCalledWith: tc.argumentsRaw,
-          workflowId
         } satisfies LoopMessage
       })
     )

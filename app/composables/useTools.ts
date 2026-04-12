@@ -1,7 +1,7 @@
 export interface ToolCatalogItem {
   name: string
   description: string
-  sourceType: 'builtin' | 'mcp' | 'workflow'
+  sourceType: 'builtin' | 'mcp'
   sourceName: string
   enabledByDefault: boolean
 }

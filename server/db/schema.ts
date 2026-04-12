@@ -15,18 +15,6 @@ export const chatsRelations = relations(chats, ({ many }) => ({
   messages: many(messages)
 }))
 
-export const workflows = sqliteTable('workflows', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  name: text('name').notNull(),
-  result: text('result'),
-  completedAt: integer('completed_at', { mode: 'timestamp' }),
-  ...timestamps
-})
-
-export const workflowsRelations = relations(workflows, ({ many }) => ({
-  messages: many(messages)
-}))
-
 export const messages = sqliteTable('messages', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   chatId: text('chat_id').notNull().references(() => chats.id, { onDelete: 'cascade' }),
@@ -40,7 +28,6 @@ export const messages = sqliteTable('messages', {
   toolCallId: text('tool_call_id'),
   toolCalledWith: text('tool_called_with'),
   attachments: text('attachments'),
-  workflowId: text('workflow_id').references(() => workflows.id),
   sealed: integer('sealed', { mode: 'boolean' }).notNull().default(false),
   ...timestamps
 }, table => [
@@ -51,10 +38,6 @@ export const messagesRelations = relations(messages, ({ one }) => ({
   chat: one(chats, {
     fields: [messages.chatId],
     references: [chats.id]
-  }),
-  workflow: one(workflows, {
-    fields: [messages.workflowId],
-    references: [workflows.id]
   })
 }))
 

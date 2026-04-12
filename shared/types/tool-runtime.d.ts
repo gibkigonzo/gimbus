@@ -1,6 +1,6 @@
 import type OpenAI from 'openai'
 
-export type ToolSourceType = 'builtin' | 'mcp' | 'workflow'
+export type ToolSourceType = 'builtin' | 'mcp'
 
 export interface ToolCatalogItem {
   name: string
