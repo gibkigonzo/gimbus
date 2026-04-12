@@ -26,7 +26,7 @@ export const analyzeImageTool: ChatCompletionTool = {
       properties: {
         pathname: {
           type: 'string',
-          description: 'The blob pathname of the image, found in the blob_pathname field of the image\'s .description.md file.'
+          description: 'The blob pathname of the image. Read the exact value from the blob_pathname field in the image\'s .description.md file. Must start with "uploads/", never with "playground/".'
         },
         question: {
           type: 'string',
@@ -41,9 +41,12 @@ export const analyzeImageTool: ChatCompletionTool = {
 export async function handleAnalyzeImage(rawArgs: Record<string, unknown>, model: string): Promise<unknown> {
   const args = argsSchema.parse(rawArgs)
 
-  const blobData = await blob.get(args.pathname)
+  // Strip accidental playground/ prefix — blob storage paths start with uploads/
+  const pathname = args.pathname.replace(/^playground\//, '')
+
+  const blobData = await blob.get(pathname)
   if (!blobData) {
-    throw new Error(`Image not found in blob storage: ${args.pathname}`)
+    throw new Error(`Image not found in blob storage: ${pathname}`)
   }
 
   let buffer = Buffer.from(await blobData.arrayBuffer()) as Buffer
