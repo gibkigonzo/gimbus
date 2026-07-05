@@ -6,7 +6,13 @@ export function runStreamingAgentLoop(options: StreamingAgentLoopOptions) {
   const eventStream = createEventStream(options.event)
   const runtime = options.event.context.$toolRuntime
   const abortController = new AbortController()
-  options.event.node.req.on('close', () => {
+  // `req` ('close' on IncomingMessage), not `res`, looks like the natural choice —
+  // but once the request body has been read (readValidatedBody, always true here),
+  // 'close' on `req` no longer fires when the client disconnects mid-stream. `res`
+  // ('close' on ServerResponse) does fire reliably in that case — verified against
+  // a raw h3 server with a killed client. Without this, a dropped connection never
+  // aborts the loop: the turn just runs to completion in the background.
+  options.event.node.res.on('close', () => {
     console.log('Client disconnected, aborting agent loop')
     abortController.abort()
   })
