@@ -38,6 +38,12 @@ A tool picker lets you enable or disable individual tools before sending a messa
 ### Token usage tracking
 Input tokens, output tokens, and cached tokens are recorded per assistant message and displayed in the UI.
 
+### Tool-call confirmation
+Risky tool calls (writing/editing files, publishing for download) pause and show an approve/deny prompt before running.
+
+### Auto-generated chat titles
+Once a new chat's first reply comes back, its sidebar title is automatically replaced with a short, LLM-generated summary.
+
 ---
 
 ## Getting started

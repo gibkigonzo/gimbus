@@ -30,6 +30,7 @@ server/
     prompts.ts     # System prompt assembly
   db/schema.ts     # Drizzle ORM: chats + messages tables
   plugins/         # Nitro plugin mounts $toolRuntime on H3 context
+  utils/observability/  # Vendor-neutral tracing sinks (console, lessons) fed by ai-sdk telemetry
 shared/
   types/           # Shared TypeScript types (agent, db, tool-runtime, SSE)
   utils/           # Models list, file config, generic helpers
@@ -47,6 +48,7 @@ mcp.json           # MCP server declarations
 | `GET` | `/api/chats/[id]` | Fetch chat + messages (AgentMessage format) |
 | `DELETE` | `/api/chats/[id]` | Delete chat and its blob files |
 | `POST` | `/api/chats/[id]` | **Stream agent loop** for next turn;
+| `POST` | `/api/chats/[id]/confirm` | Approve or deny a pending tool-call confirmation request |
 | `GET` | `/api/tools` | Tool catalog + default enabled names |
 | `PUT` | `/api/upload` | Upload file attachment for a chat (`chatId` in body) |
 | `DELETE` | `/api/upload/[...pathname]` | Delete a blob by pathname |
@@ -62,11 +64,15 @@ mcp.json           # MCP server declarations
 - `context.ts` — `buildContext()` builds `{ system, messages }` from DB messages (system message extracted separately per ai-sdk's dedicated `system` option); resolves image blobs inline
 - `model-provider.ts` — `getModel(modelId)`: ai-sdk `LanguageModel` factory backed by `@openrouter/ai-sdk-provider`
 - `history.ts` — `formatUserContent()` builds XML user message string; `stripUserContentXml()` recovers plain text for UI
-- `persist.ts` — `saveTurn()` persists user + assistant + tool messages after the loop completes
+- `persist.ts` — `saveTurn()` persists assistant + tool messages after the loop completes (the user message itself is saved immediately when the request comes in, in `chats/[id].post.ts` — not gated behind turn completion, so a dropped connection doesn't also lose the message that was typed)
+- `title.ts` — `maybeGenerateChatTitle()`: on a chat's first turn only, generates a short LLM title, persists it, and pushes a `title` SSE chunk to refresh the sidebar
 
 ## Tool Runtime (`server/utils/tool-runtime/`, `server/plugins/`)
 
 `ToolRuntimeState` is built once at startup by `build.ts` and attached to `event.context.$toolRuntime`. It merges MCP tools and built-in tools into a single ai-sdk `ToolSet` (each tool is a `tool()`/`dynamicTool()` object carrying its own schema + `execute`) plus a catalog. Each catalog entry carries: `name`, `description`, `sourceType`, `sourceName`, `enabledByDefault`.
+
+- `tool-wrappers.ts` — `withLessons(name, tool)` merges persisted per-tool failure notes (written by the `lessons` observability sink on error) into the tool's result as a `hints` field; `withConfirmation(name, tool)` pauses a call for human approve/deny via a `confirmation-request` SSE chunk + `POST /api/chats/[id]/confirm`, additive to (not a replacement for) `disabledByDefault` scoping. Both are applied at registration time in `build.ts`.
+- `confirmation-registry.ts` — in-memory `Map` coordinating a paused tool call with its eventual human response; not persisted (ephemeral, single-process, mirrors the request's own lifetime)
 
 ### Built-in Tools
 
@@ -77,6 +83,7 @@ mcp.json           # MCP server declarations
 | `analyze_image` | `server/utils/tools/analyze-image.ts` | Ask a targeted question about an uploaded image (uses `analyzeImageStructured`) |
 | `publish_for_download` | `server/utils/tools/publish-for-download.ts` | Publish a playground file to blob storage and return a download URL |
 | `delegate` | `server/utils/tools/delegate.ts` | Spawn predefined sub-agents in parallel by `agentName`; registry in `delegate-agents.ts` defines system prompts and tool sets; **disabled by default** |
+| `hub_submit_answer` | `server/utils/tools/hub-shell.ts` | Submit a hub.ag3nts.org course task answer to `/verify`; **disabled by default**; excluded from the confirmation gate (driven in tight loops for some tasks) |
 
 ### MCP Tools
 
@@ -100,11 +107,13 @@ Three tables (SQLite via Drizzle):
 
 ## Frontend AI Features
 
-- **`useAgentChat`** — consumes SSE, builds message list with streaming text + tool results, tracks usage; provides `sendMessage()`, `stop()`, `regenerate()`
+- **`useAgentChat`** — consumes SSE, builds message list with streaming text + tool results, tracks usage; provides `sendMessage()`, `stop()`, `regenerate()`, `triggerAgent()` (continue with no new message — used for a chat's first turn and to resume a turn interrupted before it got a reply)
 - **`useModels`** — model list from `shared/utils/models.ts`, persisted in cookie
 - **`useTools`** — tool catalog fetched from `/api/tools`, selected tools persisted in cookie as `allowTools`
 - **`useFileUpload`** — drag-drop/picker upload to `/api/upload`, tracks per-file status, returns `FileAttachment` objects (`type`, `mediaType`, `pathname`, `fileId`, `playgroundPath`, `isChunked`) attached to messages
 - **Tool result UI** — tool messages render result and call arguments in separate tabs
+- **Tool-call confirmation UI** — a `confirmation-request` SSE chunk shows an approve/deny modal (`ModalConfirm`); the response posts to `/api/chats/[id]/confirm`
+- **Interrupted-turn recovery** (`chat/[id].vue`) — if a chat's last message is a user message with no reply (turn dropped before completing), shows an explicit "Wygeneruj odpowiedź" button (`triggerAgent()`) instead of silently auto-continuing — a genuinely new chat's first turn is still auto-triggered
 
 ## Build & Run
 
@@ -139,3 +148,6 @@ Requires `OPENROUTER_API_KEY` in `.env`.
 - **Built-in tool state**: use `useStorage('tasks')` (Nitro KV) for ephemeral per-session state. Do not use module-level variables or add DB tables for transient tool state
 - **Structured LLM output**: when an LLM call must return typed/validated data, use `structuredChat(messages, ZodSchema, model)` from `server/utils/openrouter.ts` (backed by ai-sdk's `generateText({ output: Output.object(...) })` — not the deprecated `generateObject`). For image input, use `analyzeImageStructured(dataUrl, prompt, ZodSchema, model)`. Never parse raw completion text manually.
 - **`delegate` agent registry**: new sub-agent types must be added to `AGENT_REGISTRY` in `server/utils/tools/delegate-agents.ts` (name → `systemPrompt` + `allowTools`); the LLM selects agents by name only — never accept `systemPrompt` as a tool argument (prompt injection vector)
+- **Client-disconnect detection must use `res.on('close')`, not `req.on('close')`** — once a request's body has been read (always true here via `readValidatedBody`), `req`'s own `'close'` event no longer fires when the client disconnects mid-stream; `res`'s does. Verified against a raw h3 repro. Using `req` silently disables loop abortion — the turn just runs to completion in the background regardless of the client
+- **Tool error feedback ("lessons")**: use `withLessons()` (`tool-runtime/tool-wrappers.ts`) for tools that call flaky external systems (MCP tools, `hub_submit_answer`) — captured via the `lessons` observability sink on any `{ error }` result, merged into that tool's next result as a `hints` field. Never inject this into the system prompt (must stay static) or into purely local/deterministic tools
+- **Risky tool calls** should be wrapped with `withConfirmation()` — additive to, not a replacement for, `disabledByDefault` scoping. Don't gate tools driven in tight loops (many rapid calls expected per turn) — per-call confirmation makes those unusable
