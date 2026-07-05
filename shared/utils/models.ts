@@ -3,5 +3,6 @@ export const MODELS = [
   { label: 'Gemini 3.1 Flash Lite Preview', value: 'google/gemini-3.1-flash-lite-preview', icon: 'i-simple-icons-google' },
   { label: 'GPT-4o Mini', value: 'openai/gpt-4o-mini', icon: 'i-simple-icons-openai' },
   // google/gemma-4-31b-it
-  { label: 'Gemma 4 31B IT', value: 'stepfun/step-3.5-flash:free', icon: 'i-simple-icons-google' }
+  { label: 'Gemma 4 31B IT', value: 'stepfun/step-3.5-flash:free', icon: 'i-simple-icons-google' },
+  { label: 'Claude Sonnet 4.6', value: 'anthropic/claude-sonnet-4.6', icon: 'i-simple-icons-anthropic' }
 ]

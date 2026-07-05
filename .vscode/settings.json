@@ -8,5 +8,13 @@
   "tailwindCSS.classAttributes": ["class", "ui"],
   "tailwindCSS.experimental.classRegex": [
     ["['\"`]([^'\"`]*)['\"`]"]
+  ],
+  "sqltools.connections": [
+    {
+      "previewLimit": 50,
+      "driver": "SQLite",
+      "name": "gimbus",
+      "database": ".data/db/sqlite.db"
+    }
   ]
 }
