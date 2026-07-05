@@ -1,27 +1,15 @@
 import { db, schema } from 'hub:db'
-import type { FileAttachment } from '#shared/utils/file'
 
 /**
- * Persists all messages after the agent loop completes.
- * Saves the user message (if any) followed by the generated assistant+tool messages.
+ * Persists the generated assistant+tool messages after the agent loop
+ * completes. The user message itself is saved separately, immediately when
+ * the request comes in (see chats/[id].post.ts) — not gated behind this.
  */
 export async function saveTurn(
   chatId: string,
   model: string,
-  result: AgentLoopResult,
-  userContent?: string,
-  files?: FileAttachment[]
+  result: AgentLoopResult
 ): Promise<void> {
-  if (userContent) {
-    await db.insert(schema.messages).values({
-      chatId,
-      role: 'user',
-      content: userContent,
-      model,
-      attachments: files && files.length > 0 ? JSON.stringify(files) : null
-    })
-  }
-
   let assistantIdx = 0
   for (const msg of result.messages) {
     if (msg.role === 'assistant') {

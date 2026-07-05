@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { db, schema } from 'hub:db'
 import { MODELS } from '#shared/utils/models'
 import { getChatWithMessages } from '../../utils/db/queries'
 import { formatUserContent } from '../../utils/agent/history'
@@ -42,6 +43,19 @@ export default defineEventHandler(async (event) => {
   // Build XML content once — same string saved to DB and sent to LLM
   const userContent = message ? formatUserContent(message, files) : undefined
 
+  // Saved immediately, before the loop runs — not gated behind the turn
+  // completing. A dropped connection (refresh, closed tab) mid-generation
+  // must not also cost you the message you just typed.
+  if (userContent) {
+    await db.insert(schema.messages).values({
+      chatId: id,
+      role: 'user',
+      content: userContent,
+      model,
+      attachments: files && files.length > 0 ? JSON.stringify(files) : null
+    })
+  }
+
   const context = await buildContext(
     chat.messages,
     userContent ? { content: userContent, files } : undefined
@@ -54,7 +68,7 @@ export default defineEventHandler(async (event) => {
     chatId: id,
     allowTools,
     onCompleted: async (result, pushSse) => {
-      await saveTurn(id, model, result, userContent, files)
+      await saveTurn(id, model, result)
       // On the real first turn the frontend triggers the loop with no `message`
       // (it was already saved by POST /api/chats) — fall back to the persisted
       // first user message rather than requiring a freshly-sent one.

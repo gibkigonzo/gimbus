@@ -82,11 +82,24 @@ function copy(_e: MouseEvent, message: UIMessage) {
   }, 2000)
 }
 
+// True only for a genuinely brand-new chat (no assistant reply anywhere yet) —
+// the very first turn, silently auto-continued right after chat creation.
+const isBrandNewChat = data.value?.messages.every(m => m.role !== 'assistant') ?? false
+
 onMounted(() => {
-  const hasNoReply = data.value?.messages.every(m => m.role !== 'assistant')
-  if (hasNoReply) {
+  if (isBrandNewChat) {
     void chat.triggerAgent()
   }
+})
+
+// A later turn that got interrupted (refresh, closed tab) before the model
+// replied leaves the last message as 'user' with no assistant reply — unlike
+// the brand-new-chat case, this is never auto-continued: it requires an
+// explicit click so a dropped connection doesn't silently re-spend tokens
+// the moment you reopen the chat.
+const needsReply = computed(() => {
+  if (isBrandNewChat || chatStatus.value === 'streaming') return false
+  return chatMessages.value.at(-1)?.role === 'user'
 })
 
 // Show toast on error
@@ -230,6 +243,16 @@ watch(chat.error, (err) => {
               </div>
             </template>
           </UChatMessages>
+
+          <div v-if="needsReply" class="flex justify-center pb-2">
+            <UButton
+              label="Wygeneruj odpowiedź"
+              icon="i-lucide-rotate-cw"
+              color="neutral"
+              variant="subtle"
+              @click="chat.triggerAgent()"
+            />
+          </div>
 
           <UChatPrompt
             v-model="input"
