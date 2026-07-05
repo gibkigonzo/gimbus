@@ -1,5 +1,5 @@
 import { streamText, stepCountIs } from 'ai'
-import type { ToolSet, TextStreamPart } from 'ai'
+import type { ToolSet, TextStreamPart, ModelMessage } from 'ai'
 import type { LoopMessage, LoopContext } from '#shared/types/agent-runtime'
 import type { AgentGenerationMeta } from '../observability/types'
 import { getModel } from './model-provider'
@@ -9,6 +9,31 @@ const MAX_ITERATIONS = 60
 // ceiling from being requested outright, which OpenRouter rejects outright when the
 // account's available credit balance is below that ceiling.
 export const MAX_OUTPUT_TOKENS = 8192
+
+/**
+ * Moves the (non-system) cache breakpoint to the last message of the current step.
+ *
+ * `stopWhen: stepCountIs(MAX_ITERATIONS)` drives many internal streamText steps
+ * (tool call -> tool result -> next step) inside a single agent turn, each appending
+ * fresh messages and re-sending the whole prompt. A breakpoint set once up front never
+ * moves, so every step past the first pays full price for the growing tail. Re-marking
+ * the last message on every step, via `prepareStep`, keeps the whole prior prefix cached
+ * and only charges for the delta generated since the previous step.
+ */
+export function markLastMessageCacheable(messages: ModelMessage[]): ModelMessage[] {
+  if (messages.length === 0) return messages
+  const last = messages[messages.length - 1]!
+  return [
+    ...messages.slice(0, -1),
+    {
+      ...last,
+      providerOptions: {
+        ...last.providerOptions,
+        openrouter: { cacheControl: { type: 'ephemeral' } }
+      }
+    }
+  ]
+}
 
 /**
  * Maps a single ai-sdk fullStream part to the wire SseChunk shape the frontend/DB
@@ -58,6 +83,7 @@ export async function runAgentLoopCore(
       tools,
       activeTools: activeToolNames,
       stopWhen: stepCountIs(MAX_ITERATIONS),
+      prepareStep: ({ messages }) => ({ messages: markLastMessageCacheable(messages) }),
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       abortSignal: signal,
       experimental_context: { model, chatId: meta?.chatId },

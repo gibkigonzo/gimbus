@@ -26,7 +26,7 @@ vi.mock('./model-provider', () => ({
   getModel: (modelId: string) => ({ modelId })
 }))
 
-const { runAgentLoopCore, mapStreamPartToSse, MAX_OUTPUT_TOKENS } = await import('./core-loop')
+const { runAgentLoopCore, mapStreamPartToSse, markLastMessageCacheable, MAX_OUTPUT_TOKENS } = await import('./core-loop')
 
 async function* toAsyncIterable<T>(items: T[]): AsyncGenerator<T> {
   for (const item of items) yield item
@@ -85,6 +85,48 @@ describe('mapStreamPartToSse', () => {
   })
 })
 
+describe('markLastMessageCacheable', () => {
+  it('returns an empty array unchanged', () => {
+    expect(markLastMessageCacheable([])).toEqual([])
+  })
+
+  it('marks only the last message, leaving earlier ones untouched', () => {
+    const messages = [
+      { role: 'user' as const, content: 'first' },
+      { role: 'assistant' as const, content: 'second' }
+    ]
+    const result = markLastMessageCacheable(messages)
+    expect(result[0]).toEqual({ role: 'user', content: 'first' })
+    expect(result[1]).toEqual({
+      role: 'assistant',
+      content: 'second',
+      providerOptions: { openrouter: { cacheControl: { type: 'ephemeral' } } }
+    })
+  })
+
+  it('preserves and extends existing providerOptions on the last message', () => {
+    const messages = [
+      { role: 'user' as const, content: 'hi', providerOptions: { anthropic: { foo: 'bar' } } }
+    ]
+    const result = markLastMessageCacheable(messages)
+    expect(result[0]).toEqual({
+      role: 'user',
+      content: 'hi',
+      providerOptions: {
+        anthropic: { foo: 'bar' },
+        openrouter: { cacheControl: { type: 'ephemeral' } }
+      }
+    })
+  })
+
+  it('does not mutate the input array', () => {
+    const messages = [{ role: 'user' as const, content: 'hi' }]
+    const result = markLastMessageCacheable(messages)
+    expect(result).not.toBe(messages)
+    expect(messages[0]).toEqual({ role: 'user', content: 'hi' })
+  })
+})
+
 describe('runAgentLoopCore', () => {
   beforeEach(() => {
     streamTextMock.mockReset()
@@ -102,6 +144,19 @@ describe('runAgentLoopCore', () => {
     streamTextMock.mockReturnValue(fakeStreamTextResult([], []))
     await runAgentLoopCore(() => {}, { messages: [] }, {}, [], 'openai/gpt-4o-mini')
     expect(streamTextMock.mock.calls[0]![0]).toMatchObject({ maxOutputTokens: MAX_OUTPUT_TOKENS })
+  })
+
+  it('passes a prepareStep that moves the cache breakpoint to the last message of the step', async () => {
+    streamTextMock.mockReturnValue(fakeStreamTextResult([], []))
+    await runAgentLoopCore(() => {}, { messages: [] }, {}, [], 'openai/gpt-4o-mini')
+    const { prepareStep } = streamTextMock.mock.calls[0]![0]
+    const stepMessages = [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }]
+    const result = await prepareStep({ messages: stepMessages })
+    expect(result.messages.at(-1)).toEqual({
+      role: 'assistant',
+      content: 'b',
+      providerOptions: { openrouter: { cacheControl: { type: 'ephemeral' } } }
+    })
   })
 
   it('logs the specific message when the stream emits an error part', async () => {
