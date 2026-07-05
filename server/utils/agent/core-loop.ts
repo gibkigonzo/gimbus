@@ -3,6 +3,7 @@ import type { ToolSet, TextStreamPart, ModelMessage } from 'ai'
 import type { LoopMessage, LoopContext } from '#shared/types/agent-runtime'
 import type { AgentGenerationMeta } from '../observability/types'
 import { getModel } from './model-provider'
+import { waitForConfirmation, resolveConfirmation } from '../tool-runtime/confirmation-registry'
 
 const MAX_ITERATIONS = 60
 // Per-step cap, not per-model config: prevents a model's own (much larger) default
@@ -86,7 +87,24 @@ export async function runAgentLoopCore(
       prepareStep: ({ messages }) => ({ messages: markLastMessageCacheable(messages) }),
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       abortSignal: signal,
-      experimental_context: { model, chatId: meta?.chatId },
+      experimental_context: {
+        model,
+        chatId: meta?.chatId,
+        requestConfirmation: async (toolName: string, input: unknown) => {
+          const confirmationId = crypto.randomUUID()
+          await pushSse({ type: 'confirmation-request', confirmationId, toolName, input })
+          // If the client disconnects while we're waiting, resolveConfirmation
+          // both unblocks the tool call and cleans up the pending entry — the
+          // same path a real user response takes.
+          const onAbort = () => resolveConfirmation(confirmationId, false)
+          signal?.addEventListener('abort', onAbort, { once: true })
+          try {
+            return await waitForConfirmation(confirmationId)
+          } finally {
+            signal?.removeEventListener('abort', onAbort)
+          }
+        }
+      },
       experimental_telemetry: { isEnabled: true, metadata: { ...meta } },
       onError: () => {} // suppress default console.error — 'error' parts are handled explicitly below
     })

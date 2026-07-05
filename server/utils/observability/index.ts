@@ -1,5 +1,6 @@
 import { registerAiSdkBridge } from './ai-sdk-bridge'
 import { createConsoleSink } from './sinks/console-sink'
+import { createLessonsSink } from './sinks/lessons-sink'
 import type { ObservabilitySink } from './types'
 
 /**
@@ -9,6 +10,6 @@ import type { ObservabilitySink } from './types'
  * env-var check — no other file needs to change.
  */
 export function initObservability() {
-  const sinks: ObservabilitySink[] = [createConsoleSink()]
+  const sinks: ObservabilitySink[] = [createConsoleSink(), createLessonsSink()]
   registerAiSdkBridge(sinks)
 }

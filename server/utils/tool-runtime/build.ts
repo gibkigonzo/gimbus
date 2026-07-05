@@ -4,8 +4,18 @@ import { manageTasksTool } from '../tools/tasks'
 import { imageProcessTool } from '../tools/image-process'
 import { analyzeImageTool } from '../tools/analyze-image'
 import { publishForDownloadTool } from '../tools/publish-for-download'
-import { hubShellExecTool, hubSubmitAnswerTool } from '../tools/hub-shell'
+import { hubSubmitAnswerTool } from '../tools/hub-shell'
 import { createDelegateHandler } from '../tools/delegate'
+import { withLessons, withConfirmation } from './tool-wrappers'
+
+/**
+ * Tools flagged here get a per-call human confirm/deny gate (withConfirmation)
+ * on top of the existing disabledByDefault scoping — additive defense-in-depth
+ * for write-capable/consequential calls, not a replacement for it. Excludes
+ * hub_submit_answer deliberately: task loops (e.g. "reactor") drive it with many
+ * rapid calls, where per-call confirmation would make it unusable.
+ */
+const RISKY_TOOL_NAMES = new Set(['write_file', 'edit_file', 'publish_for_download'])
 
 export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
   const toolsByName = new Map<string, Tool>()
@@ -16,18 +26,23 @@ export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
     sourceName: string,
     name: string,
     tool: Tool,
-    enabledByDefault: boolean
+    enabledByDefault: boolean,
+    wrapOptions?: { collectLessons?: boolean }
   ) => {
     if (toolsByName.has(name)) {
       console.warn(`[tool-runtime] Skipping duplicate tool '${name}' from '${sourceName}'`)
       return
     }
 
-    toolsByName.set(name, tool)
+    let wrapped = tool
+    if (wrapOptions?.collectLessons) wrapped = withLessons(name, wrapped)
+    if (RISKY_TOOL_NAMES.has(name)) wrapped = withConfirmation(name, wrapped)
+
+    toolsByName.set(name, wrapped)
 
     catalog.push({
       name,
-      description: tool.description ?? '',
+      description: wrapped.description ?? '',
       sourceType,
       sourceName,
       enabledByDefault
@@ -38,12 +53,11 @@ export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
   registerTool('builtin', 'built-in', 'image_process', imageProcessTool, true)
   registerTool('builtin', 'built-in', 'analyze_image', analyzeImageTool, true)
   registerTool('builtin', 'built-in', 'publish_for_download', publishForDownloadTool, true)
-  registerTool('builtin', 'built-in', 'hub_shell_exec', hubShellExecTool, false)
-  registerTool('builtin', 'built-in', 'hub_submit_answer', hubSubmitAnswerTool, false)
+  registerTool('builtin', 'built-in', 'hub_submit_answer', hubSubmitAnswerTool, false, { collectLessons: true })
 
   const mcp = await createMcpTools()
   for (const mcpTool of mcp.tools) {
-    registerTool('mcp', mcpTool.sourceName, mcpTool.name, mcpTool.tool, mcpTool.enabledByDefault)
+    registerTool('mcp', mcpTool.sourceName, mcpTool.name, mcpTool.tool, mcpTool.enabledByDefault, { collectLessons: true })
   }
 
   // delegate must be registered last — its handler closes over the complete tool set

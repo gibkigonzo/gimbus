@@ -26,7 +26,7 @@ export function runStreamingAgentLoop(options: StreamingAgentLoopOptions) {
       )
 
       if (!abortController.signal.aborted) {
-        await options.onCompleted?.(result)
+        await options.onCompleted?.(result, chunk => eventStream.push(JSON.stringify(chunk)))
       }
     } catch (err: unknown) {
       if (!abortController.signal.aborted) {

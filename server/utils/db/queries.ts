@@ -17,3 +17,7 @@ export async function getChatWithMessages(id: string) {
 
   return chat
 }
+
+export async function updateChatTitle(id: string, title: string) {
+  await db.update(schema.chats).set({ title }).where(eq(schema.chats.id, id))
+}

@@ -1,6 +1,25 @@
 import type { AgentMessage } from '#shared/types/agent'
 import type { FileAttachment } from '#shared/utils/file'
 import { useModels } from './useModels'
+import { LazyModalConfirm } from '#components'
+
+async function handleConfirmationRequest(chatId: string, chunk: SseConfirmationRequest) {
+  const overlay = useOverlay()
+  const modal = overlay.create(LazyModalConfirm, {
+    props: {
+      title: `Allow "${chunk.toolName}"?`,
+      description: `The agent wants to call "${chunk.toolName}" with:\n${JSON.stringify(chunk.input)}`,
+      confirmLabel: 'Allow',
+      cancelLabel: 'Deny'
+    }
+  })
+  const approved = await modal.open()
+
+  await $fetch(`/api/chats/${chatId}/confirm`, {
+    method: 'POST',
+    body: { confirmationId: chunk.confirmationId, approved: !!approved }
+  }).catch(() => {})
+}
 
 export type AgentChatStatus = 'idle' | 'streaming' | 'error'
 
@@ -103,6 +122,13 @@ export function useAgentChat({ chatId, initialMessages = [] }: UseAgentChatOptio
               lastAssistantMessage.cachedTokens = chunk.cachedTokens
               lastAssistantMessage.model = chunk.model
             }
+          } else if (chunk.type === 'title') {
+            refreshNuxtData('/api/chats')
+          } else if (chunk.type === 'confirmation-request') {
+            // Fire-and-forget: the server is already paused waiting on this
+            // response, so nothing else will arrive on the stream until the
+            // user answers — no need to block this loop on the modal.
+            handleConfirmationRequest(chatId, chunk)
           } else if (chunk.type === 'done') {
             // Stream finished
           } else if (chunk.type === 'error') {

@@ -4,6 +4,7 @@ import { getChatWithMessages } from '../../utils/db/queries'
 import { formatUserContent } from '../../utils/agent/history'
 import { buildContext } from '../../utils/agent/context'
 import { saveTurn } from '../../utils/agent/persist'
+import { maybeGenerateChatTitle } from '../../utils/agent/title'
 
 const fileAttachmentSchema = z.object({
   type: z.literal('file'),
@@ -36,6 +37,7 @@ export default defineEventHandler(async (event) => {
   const { model, message, allowTools, files } = await readValidatedBody(event, bodySchema.parse)
 
   const chat = await getChatWithMessages(id)
+  const isFirstTurn = chat.messages.every(m => m.role !== 'assistant')
 
   // Build XML content once — same string saved to DB and sent to LLM
   const userContent = message ? formatUserContent(message, files) : undefined
@@ -51,6 +53,13 @@ export default defineEventHandler(async (event) => {
     model,
     chatId: id,
     allowTools,
-    onCompleted: result => saveTurn(id, model, result, userContent, files)
+    onCompleted: async (result, pushSse) => {
+      await saveTurn(id, model, result, userContent, files)
+      // On the real first turn the frontend triggers the loop with no `message`
+      // (it was already saved by POST /api/chats) — fall back to the persisted
+      // first user message rather than requiring a freshly-sent one.
+      const firstUserContent = userContent ?? chat.messages.find(m => m.role === 'user')?.content ?? undefined
+      await maybeGenerateChatTitle(id, model, isFirstTurn, firstUserContent, result, pushSse)
+    }
   })
 })

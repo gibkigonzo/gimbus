@@ -31,7 +31,19 @@ export interface SseError {
   message: string
 }
 
-export type SseChunk = SseTextDelta | SseToolResult | SseUsage | SseDone | SseError
+export interface SseTitle {
+  type: 'title'
+  title: string
+}
+
+export interface SseConfirmationRequest {
+  type: 'confirmation-request'
+  confirmationId: string
+  toolName: string
+  input: unknown
+}
+
+export type SseChunk = SseTextDelta | SseToolResult | SseUsage | SseDone | SseError | SseTitle | SseConfirmationRequest
 
 export interface AssistantUsage {
   inputTokens: number
@@ -70,7 +82,7 @@ export interface StreamingAgentLoopOptions {
   model: string
   chatId: string
   allowTools?: string[]
-  onCompleted?: (result: AgentLoopResult) => void | Promise<void>
+  onCompleted?: (result: AgentLoopResult, pushSse: (chunk: SseChunk) => void | Promise<void>) => void | Promise<void>
 }
 
 export interface StreamingAgentLoopHandle {

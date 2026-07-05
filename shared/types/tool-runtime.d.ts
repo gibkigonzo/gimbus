@@ -6,6 +6,8 @@ export type ToolSourceType = 'builtin' | 'mcp'
 export interface ToolExecContext {
   model: string
   chatId?: string
+  /** Pauses the turn, asks the user to confirm/deny this call over SSE, and resolves once they respond (or it times out). Only present on the main turn's context — see withConfirmation() in tool-runtime/tool-wrappers.ts. */
+  requestConfirmation?: (toolName: string, input: unknown) => Promise<boolean>
 }
 
 export interface ToolCatalogItem {

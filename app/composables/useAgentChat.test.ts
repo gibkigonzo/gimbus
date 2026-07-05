@@ -6,6 +6,8 @@ vi.mock('./useModels', () => ({
   useModels: () => ({ model: { value: 'openai/gpt-4o-mini' } })
 }))
 
+vi.mock('#components', () => ({ LazyModalConfirm: {} }))
+
 vi.stubGlobal('useTools', () => ({ selectedToolNames: { value: [] } }))
 
 const fetchMock = vi.fn()
