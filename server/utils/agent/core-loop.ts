@@ -5,6 +5,10 @@ import type { AgentGenerationMeta } from '../observability/types'
 import { getModel } from './model-provider'
 
 const MAX_ITERATIONS = 60
+// Per-step cap, not per-model config: prevents a model's own (much larger) default
+// ceiling from being requested outright, which OpenRouter rejects outright when the
+// account's available credit balance is below that ceiling.
+export const MAX_OUTPUT_TOKENS = 8192
 
 /**
  * Maps a single ai-sdk fullStream part to the wire SseChunk shape the frontend/DB
@@ -54,6 +58,7 @@ export async function runAgentLoopCore(
       tools,
       activeTools: activeToolNames,
       stopWhen: stepCountIs(MAX_ITERATIONS),
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
       abortSignal: signal,
       experimental_context: { model, chatId: meta?.chatId },
       experimental_telemetry: { isEnabled: true, metadata: { ...meta } },
@@ -62,7 +67,10 @@ export async function runAgentLoopCore(
 
     for await (const part of result.fullStream) {
       const chunk = mapStreamPartToSse(part, model)
-      if (chunk) await pushSse(chunk)
+      if (chunk) {
+        if (chunk.type === 'error') console.error('[agent] Stream error', chunk.message)
+        await pushSse(chunk)
+      }
     }
 
     const steps = await result.steps

@@ -26,7 +26,7 @@ vi.mock('./model-provider', () => ({
   getModel: (modelId: string) => ({ modelId })
 }))
 
-const { runAgentLoopCore, mapStreamPartToSse } = await import('./core-loop')
+const { runAgentLoopCore, mapStreamPartToSse, MAX_OUTPUT_TOKENS } = await import('./core-loop')
 
 async function* toAsyncIterable<T>(items: T[]): AsyncGenerator<T> {
   for (const item of items) yield item
@@ -96,6 +96,20 @@ describe('runAgentLoopCore', () => {
     await runAgentLoopCore(() => {}, { messages: [] }, {}, [], 'openai/gpt-4o-mini')
     expect(stepCountIsMock).toHaveBeenCalledWith(60)
     expect(streamTextMock.mock.calls[0]![0]).toMatchObject({ stopWhen: { __stepCount: 60 } })
+  })
+
+  it('caps maxOutputTokens so a model default ceiling is never requested outright', async () => {
+    streamTextMock.mockReturnValue(fakeStreamTextResult([], []))
+    await runAgentLoopCore(() => {}, { messages: [] }, {}, [], 'openai/gpt-4o-mini')
+    expect(streamTextMock.mock.calls[0]![0]).toMatchObject({ maxOutputTokens: MAX_OUTPUT_TOKENS })
+  })
+
+  it('logs the specific message when the stream emits an error part', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    streamTextMock.mockReturnValue(fakeStreamTextResult([{ type: 'error', error: new Error('not enough credits') }], []))
+    await runAgentLoopCore(vi.fn(), { messages: [] }, {}, [], 'openai/gpt-4o-mini')
+    expect(consoleErrorSpy).toHaveBeenCalledWith('[agent] Stream error', 'not enough credits')
+    consoleErrorSpy.mockRestore()
   })
 
   it('builds alternating assistant/tool LoopMessages across multiple steps, with one usage entry per step', async () => {

@@ -57,51 +57,60 @@ export function useAgentChat({ chatId, initialMessages = [] }: UseAgentChatOptio
           if (!rawLine.startsWith('data: ')) continue
 
           const jsonStr = rawLine.slice(6)
+          let chunk: SseChunk
           try {
-            const chunk = JSON.parse(jsonStr) as SseChunk
+            chunk = JSON.parse(jsonStr) as SseChunk
+          } catch (err) {
+            // Our own server always emits `data: ${JSON.stringify(chunk)}` — a parse
+            // failure here means the framing contract broke, not "bad external input".
+            // Log loudly rather than silently dropping it; skip only this one frame.
+            console.error('[useAgentChat] Failed to parse SSE chunk', jsonStr, err)
+            continue
+          }
 
-            if (chunk.type === 'text-delta' && chunk.text) {
-              let lastAssistantMessage = messages.value[messages.value.length - 1]
-              if (!lastAssistantMessage || lastAssistantMessage.role !== 'assistant') {
-                lastAssistantMessage = {
-                  id: crypto.randomUUID(),
-                  role: 'assistant',
-                  content: chunk.text,
-                  parts: [{ type: 'text', text: chunk.text }]
-                }
-                messages.value.push(lastAssistantMessage)
-              } else {
-                lastAssistantMessage.content += chunk.text
-                lastAssistantMessage.parts[0] = { type: 'text', text: lastAssistantMessage.content }
-              }
-            } else if (chunk.type === 'tool-result') {
-              messages.value.push({
+          if (chunk.type === 'text-delta' && chunk.text) {
+            let lastAssistantMessage = messages.value[messages.value.length - 1]
+            if (!lastAssistantMessage || lastAssistantMessage.role !== 'assistant') {
+              lastAssistantMessage = {
                 id: crypto.randomUUID(),
-                role: 'tool',
-                content: '',
-                parts: [{
-                  type: 'tool-result',
-                  toolName: chunk.toolName ?? '',
-                  result: JSON.stringify(chunk.result),
-                  toolCalledWith: chunk.toolCalledWith ?? null
-                }],
-                model: chunk.model
-              })
-            } else if (chunk.type === 'usage') {
-              const lastAssistantMessage = messages.value.findLast(m => m.role === 'assistant')!
-              if (lastAssistantMessage) {
-                lastAssistantMessage.inputTokens = chunk.inputTokens
-                lastAssistantMessage.outputTokens = chunk.outputTokens
-                lastAssistantMessage.cachedTokens = chunk.cachedTokens
-                lastAssistantMessage.model = chunk.model
+                role: 'assistant',
+                content: chunk.text,
+                parts: [{ type: 'text', text: chunk.text }]
               }
-            } else if (chunk.type === 'done') {
-              // Stream finished
-            } else if (chunk.type === 'error') {
-              throw new Error((chunk as { message?: string }).message ?? 'Unknown agent error')
+              messages.value.push(lastAssistantMessage)
+            } else {
+              lastAssistantMessage.content += chunk.text
+              lastAssistantMessage.parts[0] = { type: 'text', text: lastAssistantMessage.content }
             }
-          } catch {
-            // Ignore malformed JSON chunks
+          } else if (chunk.type === 'tool-result') {
+            messages.value.push({
+              id: crypto.randomUUID(),
+              role: 'tool',
+              content: '',
+              parts: [{
+                type: 'tool-result',
+                toolName: chunk.toolName ?? '',
+                result: JSON.stringify(chunk.result),
+                toolCalledWith: chunk.toolCalledWith ?? null
+              }],
+              model: chunk.model
+            })
+          } else if (chunk.type === 'usage') {
+            const lastAssistantMessage = messages.value.findLast(m => m.role === 'assistant')!
+            if (lastAssistantMessage) {
+              lastAssistantMessage.inputTokens = chunk.inputTokens
+              lastAssistantMessage.outputTokens = chunk.outputTokens
+              lastAssistantMessage.cachedTokens = chunk.cachedTokens
+              lastAssistantMessage.model = chunk.model
+            }
+          } else if (chunk.type === 'done') {
+            // Stream finished
+          } else if (chunk.type === 'error') {
+            throw new Error((chunk as { message?: string }).message ?? 'Unknown agent error')
+          } else {
+            // Server and client must stay in sync on SseChunk's variants (see CLAUDE.md) —
+            // an unrecognized type means one side shipped a chunk the other doesn't handle yet.
+            console.error('[useAgentChat] Unrecognized SSE chunk type', chunk)
           }
         }
       }
