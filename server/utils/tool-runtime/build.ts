@@ -5,6 +5,7 @@ import { imageProcessTool, handleImageProcess } from '../tools/image-process'
 import { analyzeImageTool, handleAnalyzeImage } from '../tools/analyze-image'
 import { publishForDownloadTool, handlePublishForDownload } from '../tools/publish-for-download'
 import { delegateTool, createDelegateHandler } from '../tools/delegate'
+import { analyzeSensorsTool, handleAnalyzeSensors } from '../tools/sensor-analysis'
 
 export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
   const handlers: Record<string, (args: Record<string, unknown>, model: string) => Promise<unknown>> = {}
@@ -40,6 +41,7 @@ export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
   registerTool('builtin', 'built-in', imageProcessTool, handleImageProcess, true)
   registerTool('builtin', 'built-in', analyzeImageTool, handleAnalyzeImage, true)
   registerTool('builtin', 'built-in', publishForDownloadTool, handlePublishForDownload, true)
+  registerTool('builtin', 'built-in', analyzeSensorsTool, handleAnalyzeSensors, true)
 
   const mcp = await createMcpTools()
   for (const mcpTool of mcp.tools) {
