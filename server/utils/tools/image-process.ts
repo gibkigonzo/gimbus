@@ -3,6 +3,7 @@ import sharp from 'sharp'
 import { blob } from 'hub:blob'
 import { z } from 'zod'
 import path from 'node:path'
+import { toolSuccess, toolError } from '../tool-runtime/tool-response'
 
 const operationSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('grayscale') }),
@@ -36,7 +37,7 @@ export const imageProcessTool = tool({
     try {
       const sourceBlob = await blob.get(args.pathname)
       if (!sourceBlob) {
-        return { error: `Blob not found: ${args.pathname}` }
+        return toolError(`Blob not found: ${args.pathname}`)
       }
 
       const sourceBuffer = Buffer.from(await sourceBlob.arrayBuffer())
@@ -99,12 +100,12 @@ export const imageProcessTool = tool({
         addRandomSuffix: true
       })
 
-      return {
+      return toolSuccess({
         message: 'Image processed successfully. It\'s displayed in the tool result block. Do not return the URL or pathname in the assistant\'s text response.',
         pathname: result.pathname
-      }
+      })
     } catch (err: unknown) {
-      return { error: (err as Error).message }
+      return toolError((err as Error).message)
     }
   }
 })

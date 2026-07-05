@@ -16,6 +16,7 @@ The agent has access to tools selected per-conversation:
 | `analyze_image` | Asks a targeted vision question about an uploaded image |
 | `image_process` | Apply transforms to an uploaded image (grayscale, b/w, resize, rotate, format conversion) |
 | `publish_for_download` | Publishes a playground file (or reassembled chunks) to blob storage and returns a download URL |
+| `grep_files` | Search for text or a regex pattern within a single sandbox file's contents |
 | `read_text_file` | Read any file in the sandbox |
 | `list_directory` | Browse sandbox directory contents |
 | `search_files` | Search files by name or content pattern |

@@ -3,6 +3,7 @@ import sharp from 'sharp'
 import { blob } from 'hub:blob'
 import { z } from 'zod'
 import { analyzeImageStructured } from '../openrouter'
+import { toolSuccess, toolError } from '../tool-runtime/tool-response'
 import type { ToolExecContext } from '#shared/types/tool-runtime'
 
 const MAX_VISION_BYTES = 2 * 1024 * 1024
@@ -30,7 +31,7 @@ export const analyzeImageTool = tool({
 
       const blobData = await blob.get(pathname)
       if (!blobData) {
-        return { error: `Image not found in blob storage: ${pathname}` }
+        return toolError(`Image not found in blob storage: ${pathname}`)
       }
 
       let buffer = Buffer.from(await blobData.arrayBuffer()) as Buffer
@@ -55,9 +56,9 @@ export const analyzeImageTool = tool({
         { chatId, agentName: 'tool:analyze_image' }
       )
 
-      return { result }
+      return toolSuccess({ result })
     } catch (err: unknown) {
-      return { error: (err as Error).message }
+      return toolError((err as Error).message)
     }
   }
 })

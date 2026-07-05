@@ -4,6 +4,7 @@ import { manageTasksTool } from '../tools/tasks'
 import { imageProcessTool } from '../tools/image-process'
 import { analyzeImageTool } from '../tools/analyze-image'
 import { publishForDownloadTool } from '../tools/publish-for-download'
+import { grepFilesTool } from '../tools/search-file-contents'
 import { hubSubmitAnswerTool } from '../tools/hub-shell'
 import { createDelegateHandler } from '../tools/delegate'
 import { withLessons, withConfirmation } from './tool-wrappers'
@@ -53,6 +54,7 @@ export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
   registerTool('builtin', 'built-in', 'image_process', imageProcessTool, true)
   registerTool('builtin', 'built-in', 'analyze_image', analyzeImageTool, true)
   registerTool('builtin', 'built-in', 'publish_for_download', publishForDownloadTool, true)
+  registerTool('builtin', 'built-in', 'grep_files', grepFilesTool, true)
   registerTool('builtin', 'built-in', 'hub_submit_answer', hubSubmitAnswerTool, false, { collectLessons: true })
 
   const mcp = await createMcpTools()

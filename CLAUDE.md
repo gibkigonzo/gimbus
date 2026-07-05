@@ -73,6 +73,7 @@ mcp.json           # MCP server declarations
 
 - `tool-wrappers.ts` — `withLessons(name, tool)` merges persisted per-tool failure notes (written by the `lessons` observability sink on error) into the tool's result as a `hints` field; `withConfirmation(name, tool)` pauses a call for human approve/deny via a `confirmation-request` SSE chunk + `POST /api/chats/[id]/confirm`, additive to (not a replacement for) `disabledByDefault` scoping. Both are applied at registration time in `build.ts`.
 - `confirmation-registry.ts` — in-memory `Map` coordinating a paused tool call with its eventual human response; not persisted (ephemeral, single-process, mirrors the request's own lifetime)
+- `tool-response.ts` — `toolSuccess(data, opts?)` / `toolError(message, opts?)`: standard response-shape composers (`next_action` / `recovery` / `diagnostics` as optional fields additive to a tool's own payload); called from inside a tool's own `execute`, not a registration-time wrapper
 
 ### Built-in Tools
 
@@ -82,6 +83,7 @@ mcp.json           # MCP server declarations
 | `image_process` | `server/utils/tools/image-process.ts` | Apply image transforms (grayscale, bw, resize, rotate, format) to an uploaded blob; returns updated blob |
 | `analyze_image` | `server/utils/tools/analyze-image.ts` | Ask a targeted question about an uploaded image (uses `analyzeImageStructured`) |
 | `publish_for_download` | `server/utils/tools/publish-for-download.ts` | Publish a playground file to blob storage and return a download URL |
+| `grep_files` | `server/utils/tools/search-file-contents.ts` | Search text/regex within a single playground file's contents, returning matching lines with line numbers; complements `read_text_file` (whole file) and `search_files` (filename search) |
 | `delegate` | `server/utils/tools/delegate.ts` | Spawn predefined sub-agents in parallel by `agentName`; registry in `delegate-agents.ts` defines system prompts and tool sets; **disabled by default** |
 | `hub_submit_answer` | `server/utils/tools/hub-shell.ts` | Submit a hub.ag3nts.org course task answer to `/verify`; **disabled by default**; excluded from the confirmation gate (driven in tight loops for some tasks) |
 
@@ -134,7 +136,7 @@ Requires `OPENROUTER_API_KEY` in `.env`.
 
 - All agent and system prompts are written in **English**
 - New tools: define via `ai`'s `tool()` (or `dynamicTool()` for runtime-discovered schemas like MCP) — one zod `inputSchema` covers both validation and the schema sent to the model, with `execute` doing the work; add a built-in under `server/utils/tools/` and register in `server/utils/tool-runtime/build.ts`, or add an MCP server to `mcp.json`
-- **Tool `execute` must catch its own errors and return `{ error: message }`** rather than throwing — a thrown error produces a differently-shaped `tool-error` stream part that the SSE adapter only handles as a defensive fallback, not the primary path
+- **Tool `execute` must catch its own errors and return `{ error: message }`** rather than throwing — a thrown error produces a differently-shaped `tool-error` stream part that the SSE adapter only handles as a defensive fallback, not the primary path. Use `toolSuccess`/`toolError` (`tool-runtime/tool-response.ts`) for this — additive `next_action`/`recovery`/`diagnostics` fields give the agent a next step instead of a bare pass/fail
 - **Pin `ai` and `@openrouter/ai-sdk-provider` to compatible versions** — do not bump to `@latest` independently; `ai@7` is incompatible with `@openrouter/ai-sdk-provider`'s stable release, which targets `ai@^6`
 - **MCP tool configuration lives in `mcp.json` `extended` field** — `allowTools`, `disabledByDefault`, `descriptionOverrides` are read by `mcp-client.ts`; `build.ts` requires no changes when adding a new MCP server
 - **Write-capable MCP tools must be listed in `disabledByDefault`** — tool-scope restriction is the primary prompt injection defense; never rely on LLM filtering alone
