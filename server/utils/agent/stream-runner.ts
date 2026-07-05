@@ -21,7 +21,8 @@ export function runStreamingAgentLoop(options: StreamingAgentLoopOptions) {
         runtime.tools,
         activeToolNames,
         options.model,
-        abortController.signal
+        abortController.signal,
+        { chatId: options.chatId, agentName: 'main' }
       )
 
       if (!abortController.signal.aborted) {

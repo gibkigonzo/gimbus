@@ -1,0 +1,47 @@
+[
+  {
+    "id": "manage-tasks-add",
+    "userMessage": "Please add a task to my list: 'Buy milk'.",
+    "expectedTool": "manage_tasks"
+  },
+  {
+    "id": "image-process-grayscale",
+    "userMessage": "Convert the image at playground/uploads/photo.jpg to grayscale for me.",
+    "expectedTool": "image_process"
+  },
+  {
+    "id": "analyze-image-question",
+    "userMessage": "Look at the uploaded image playground/uploads/photo.jpg and tell me: is there a cat in it?",
+    "expectedTool": "analyze_image"
+  },
+  {
+    "id": "publish-for-download",
+    "userMessage": "Publish the file at playground/uploads/report.pdf so I get a download link.",
+    "expectedTool": "publish_for_download"
+  },
+  {
+    "id": "read-text-file",
+    "userMessage": "Read the contents of playground/notes.md and tell me what it says.",
+    "expectedTool": "read_text_file"
+  },
+  {
+    "id": "list-directory",
+    "userMessage": "List the files inside the playground/uploads directory.",
+    "expectedTool": "list_directory"
+  },
+  {
+    "id": "search-files",
+    "userMessage": "Search the playground directory for any file with 'invoice' in its name.",
+    "expectedTool": "search_files"
+  },
+  {
+    "id": "no-tool-general-knowledge",
+    "userMessage": "What is the capital of France?",
+    "expectedTool": null
+  },
+  {
+    "id": "ambiguous-task-reminder-vs-file-read",
+    "userMessage": "Remind me to read playground/notes.md later today.",
+    "expectedTool": "manage_tasks"
+  }
+]

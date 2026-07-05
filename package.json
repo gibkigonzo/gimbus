@@ -12,7 +12,8 @@
     "db:generate": "nuxt db generate",
     "db:migrate": "nuxt db migrate",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "evals:tools": "vitest run --config vitest.evals.config.ts"
   },
   "dependencies": {
     "@iconify-json/logos": "^1.2.10",

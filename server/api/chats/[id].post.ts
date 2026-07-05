@@ -49,6 +49,7 @@ export default defineEventHandler(async (event) => {
     event,
     context,
     model,
+    chatId: id,
     allowTools,
     onCompleted: result => saveTurn(id, model, result, userContent, files)
   })

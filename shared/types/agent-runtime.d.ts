@@ -68,6 +68,7 @@ export interface StreamingAgentLoopOptions {
   event: H3Event
   context: LoopContext
   model: string
+  chatId: string
   allowTools?: string[]
   onCompleted?: (result: AgentLoopResult) => void | Promise<void>
 }

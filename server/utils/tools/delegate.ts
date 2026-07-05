@@ -40,6 +40,7 @@ export function createDelegateHandler(allTools: ToolSet, allToolNames: string[])
     inputSchema: argsSchema,
     execute: async (args, { experimental_context }) => {
       const parentModel = (experimental_context as ToolExecContext).model
+      const chatId = (experimental_context as ToolExecContext).chatId
 
       const results: TaskResult[] = await Promise.all(args.tasks.map(async (task) => {
         const agentDef = AGENT_REGISTRY[task.agentName]
@@ -66,7 +67,9 @@ export function createDelegateHandler(allTools: ToolSet, allToolNames: string[])
           context,
           allTools,
           activeToolNames,
-          model
+          model,
+          undefined,
+          { chatId, agentName: `delegate:${task.agentName}` }
         )
 
         const usage = loopResult.usagePerTurn.reduce<AssistantUsage>(

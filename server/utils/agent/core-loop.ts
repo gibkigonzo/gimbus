@@ -1,6 +1,7 @@
 import { streamText, stepCountIs } from 'ai'
 import type { ToolSet, TextStreamPart } from 'ai'
 import type { LoopMessage, LoopContext } from '#shared/types/agent-runtime'
+import type { AgentGenerationMeta } from '../observability/types'
 import { getModel } from './model-provider'
 
 const MAX_ITERATIONS = 60
@@ -39,7 +40,8 @@ export async function runAgentLoopCore(
   tools: ToolSet,
   activeToolNames: string[],
   model: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  meta?: AgentGenerationMeta
 ): Promise<AgentLoopResult> {
   const generatedMessages: LoopMessage[] = []
   const usagePerTurn: (AssistantUsage | null)[] = []
@@ -53,7 +55,8 @@ export async function runAgentLoopCore(
       activeTools: activeToolNames,
       stopWhen: stepCountIs(MAX_ITERATIONS),
       abortSignal: signal,
-      experimental_context: { model },
+      experimental_context: { model, chatId: meta?.chatId },
+      experimental_telemetry: { isEnabled: true, metadata: { ...meta } },
       onError: () => {} // suppress default console.error — 'error' parts are handled explicitly below
     })
 

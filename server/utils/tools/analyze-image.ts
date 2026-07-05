@@ -23,6 +23,7 @@ export const analyzeImageTool = tool({
   execute: async (args, { experimental_context }) => {
     try {
       const model = (experimental_context as ToolExecContext).model
+      const chatId = (experimental_context as ToolExecContext).chatId
 
       // Strip accidental playground/ prefix — blob storage paths start with uploads/
       const pathname = args.pathname.replace(/^playground\//, '')
@@ -50,7 +51,8 @@ export const analyzeImageTool = tool({
         dataUrl,
         args.question,
         ResultSchema,
-        model
+        model,
+        { chatId, agentName: 'tool:analyze_image' }
       )
 
       return { result }
