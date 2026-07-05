@@ -5,7 +5,7 @@ A full-stack AI chatbot with a real **agent loop**: it calls tools, reads files,
 ## What it can do
 
 ### Streaming agent loop
-Responses stream token by token in real time. Behind the scenes the agent iterates — calling tools in parallel, feeding results back into context, and continuing until there's nothing left to do (up to 15 iterations per turn).
+Responses stream token by token in real time. Behind the scenes the agent iterates — calling tools in parallel, feeding results back into context, and continuing until there's nothing left to do (up to 60 iterations per turn). Powered by the Vercel AI SDK, routed through OpenRouter.
 
 ### Tool calling
 The agent has access to tools selected per-conversation:
@@ -82,6 +82,7 @@ pnpm preview        # preview production build
 pnpm db:generate    # generate a new migration after schema changes
 pnpm lint           # lint the codebase
 pnpm typecheck      # TypeScript type check
+pnpm test           # run the test suite
 ```
 
 ---
@@ -93,11 +94,11 @@ app/          # Vue frontend (Nuxt pages, composables, components)
 server/
   api/        # Nitro route handlers
   utils/
-    agent/    # Agent loop, SSE streaming, tool selection
+    agent/    # Agent loop (Vercel AI SDK streamText), SSE streaming, tool selection
     tools/    # Built-in tool implementations
     tool-runtime/  # Tool catalog (MCP + built-in merged)
     mcp-client.ts  # MCP server spawner
-    openrouter.ts  # OpenAI-compatible client
+    openrouter.ts  # Structured-output helpers for OpenRouter
 shared/       # Types and utilities shared between frontend and server
 playground/   # Sandboxed filesystem exposed to the MCP tools
 mcp.json      # MCP server configuration

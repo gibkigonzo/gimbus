@@ -5,14 +5,14 @@
 Full-stack AI chatbot built with **Nuxt 4 + Nitro** and **OpenRouter**. Key capabilities:
 
 - **Multi-turn streaming conversations** — agent loop streams SSE chunks (`text-delta`, `tool-result`, `usage`, `done`, `error`) to the client in real time
-- **Agentic tool calling** — iterative loop (max 15 iterations) executes tool calls in parallel, feeds results back into context, and continues until no more tools are invoked
-- **MCP tool integration** — external tools provided by MCP servers configured in `mcp.json`
+- **Agentic tool calling** — built on Vercel AI SDK's `streamText()` (`stopWhen: stepCountIs(60)`); executes tool calls in parallel, feeds results back into context, and continues until no more tools are invoked
+- **MCP tool integration** — external tools provided by MCP servers configured in `mcp.json`, bridged into ai-sdk `dynamicTool()`s
 - **Built-in tools** — server-side tools registered in `server/utils/tool-runtime/build.ts`
-- **Per-request tool selection** — client sends `allowTools` array; server resolves tools against the catalog via `resolveToolsByAllowList()`
+- **Per-request tool selection** — client sends `allowTools` array; server resolves the active tool name list via `resolveActiveToolNames()`, restricting the model via `streamText`'s `activeTools` option
 - **File attachments** — files (images, PDF, CSV, max 8 MB) are uploaded to NuxtHub Blob keyed by `chatId`, then referenced in messages
-- **Model selection** — OpenRouter-backed; model chosen per conversation (stored in cookie)
+- **Model selection** — OpenRouter-backed via `@openrouter/ai-sdk-provider`; model chosen per conversation (stored in cookie)
 - **Token usage tracking** — `inputTokens`, `outputTokens`, `cachedTokens` recorded per assistant message and propagated to the frontend
-- **System prompt caching** — system message uses `cache_control: ephemeral` to reduce costs
+- **System prompt caching** — system prompt is passed via `streamText`'s dedicated `system` option (not embedded in `messages`) with `providerOptions.openrouter.cacheControl: { type: 'ephemeral' }` to reduce costs
 
 ## Architecture
 
@@ -22,10 +22,11 @@ server/
   api/             # Nitro route handlers (HTTP API)
   utils/
     agent/         # Core agent logic (loop, history, streaming, tool selection)
+      model-provider.ts  # ai-sdk OpenRouter provider singleton (getModel())
     tools/         # Built-in tool implementations
     tool-runtime/  # Tool catalog builder (MCP + built-in)
     mcp-client.ts  # MCP server spawner and tool bridge
-    openrouter.ts  # OpenAI-compatible client for OpenRouter
+    openrouter.ts  # ai-sdk structured-output helpers (generateText + Output.object) for OpenRouter
     prompts.ts     # System prompt assembly
   db/schema.ts     # Drizzle ORM: chats + messages tables
   plugins/         # Nitro plugin mounts $toolRuntime on H3 context
@@ -55,16 +56,17 @@ mcp.json           # MCP server declarations
 
 ## Agent Loop (`server/utils/agent/`)
 
-- `core-loop.ts` — `runAgentLoopCore()`: iterates LLM → parse tool calls → execute in parallel → reinsert results → repeat. Accepts an `AbortSignal` passed down from the stream runner.
+- `core-loop.ts` — `runAgentLoopCore()`: wraps ai-sdk `streamText()`; a `mapStreamPartToSse()` adapter maps its `fullStream` parts onto the app's SSE chunk shapes, and `result.steps` is used to rebuild DB-persistable messages after the stream ends. Accepts an `AbortSignal` passed down from the stream runner.
 - `stream-runner.ts` — wraps core loop in H3 SSE streaming; handles abort on client disconnect; saves new messages on completion via `onCompleted`
-- `tool-selection.ts` — `resolveToolsByAllowList()` filters the runtime catalog to what the request permits
-- `context.ts` — `buildContext()` builds LLM context array from DB messages; resolves image blobs inline
+- `tool-selection.ts` — `resolveActiveToolNames()` resolves the allowed tool name list from the request; passed to `streamText`'s `activeTools` option
+- `context.ts` — `buildContext()` builds `{ system, messages }` from DB messages (system message extracted separately per ai-sdk's dedicated `system` option); resolves image blobs inline
+- `model-provider.ts` — `getModel(modelId)`: ai-sdk `LanguageModel` factory backed by `@openrouter/ai-sdk-provider`
 - `history.ts` — `formatUserContent()` builds XML user message string; `stripUserContentXml()` recovers plain text for UI
 - `persist.ts` — `saveTurn()` persists user + assistant + tool messages after the loop completes
 
 ## Tool Runtime (`server/utils/tool-runtime/`, `server/plugins/`)
 
-`ToolRuntimeState` is built once at startup by `build.ts` and attached to `event.context.$toolRuntime`. It merges MCP tools and built-in tools into a single catalog. Each entry carries: `name`, `description`, `sourceType`, `sourceName`, `enabledByDefault`.
+`ToolRuntimeState` is built once at startup by `build.ts` and attached to `event.context.$toolRuntime`. It merges MCP tools and built-in tools into a single ai-sdk `ToolSet` (each tool is a `tool()`/`dynamicTool()` object carrying its own schema + `execute`) plus a catalog. Each catalog entry carries: `name`, `description`, `sourceType`, `sourceName`, `enabledByDefault`.
 
 ### Built-in Tools
 
@@ -113,6 +115,8 @@ pnpm db:migrate        # run SQLite migrations (required first time)
 pnpm dev               # dev server at http://localhost:3000
 pnpm build             # production build
 pnpm preview           # preview production build
+pnpm test              # run vitest once
+pnpm test:watch        # run vitest in watch mode
 ```
 
 Requires `OPENROUTER_API_KEY` in `.env`.
@@ -120,7 +124,9 @@ Requires `OPENROUTER_API_KEY` in `.env`.
 ## Conventions
 
 - All agent and system prompts are written in **English**
-- New tools: add a built-in under `server/utils/tools/` and register in `server/utils/tool-runtime/build.ts`, or add an MCP server to `mcp.json`
+- New tools: define via `ai`'s `tool()` (or `dynamicTool()` for runtime-discovered schemas like MCP) — one zod `inputSchema` covers both validation and the schema sent to the model, with `execute` doing the work; add a built-in under `server/utils/tools/` and register in `server/utils/tool-runtime/build.ts`, or add an MCP server to `mcp.json`
+- **Tool `execute` must catch its own errors and return `{ error: message }`** rather than throwing — a thrown error produces a differently-shaped `tool-error` stream part that the SSE adapter only handles as a defensive fallback, not the primary path
+- **Pin `ai` and `@openrouter/ai-sdk-provider` to compatible versions** — do not bump to `@latest` independently; `ai@7` is incompatible with `@openrouter/ai-sdk-provider`'s stable release, which targets `ai@^6`
 - **MCP tool configuration lives in `mcp.json` `extended` field** — `allowTools`, `disabledByDefault`, `descriptionOverrides` are read by `mcp-client.ts`; `build.ts` requires no changes when adding a new MCP server
 - **Write-capable MCP tools must be listed in `disabledByDefault`** — tool-scope restriction is the primary prompt injection defense; never rely on LLM filtering alone
 - **MCP filesystem paths must start with `playground/`** — `playgroundPath` is stored with that prefix at source (`upload/index.put.ts`, `chunk-text.ts`); passing bare `uploads/…` paths causes access denied errors
@@ -131,5 +137,5 @@ Requires `OPENROUTER_API_KEY` in `.env`.
 - **System prompt is static**: never put dynamic data (date, model, file state) in the system prompt — it busts `cache_control: ephemeral`. Dynamic data goes in the user message
 - **User message XML format**: `[<attachments>…</attachments>\n]<message>\ntext\n</message>` — stored verbatim in `messages.content`; `attachments` column (JSON) kept separately for image blob resolution at send time
 - **Built-in tool state**: use `useStorage('tasks')` (Nitro KV) for ephemeral per-session state. Do not use module-level variables or add DB tables for transient tool state
-- **Structured LLM output**: when an LLM call must return typed/validated data, use `structuredChat(messages, ZodSchema, model)` from `server/utils/openrouter.ts` (backed by Instructor). For image input, use `analyzeImageStructured(dataUrl, prompt, ZodSchema, model)`. Never parse raw completion text manually.
+- **Structured LLM output**: when an LLM call must return typed/validated data, use `structuredChat(messages, ZodSchema, model)` from `server/utils/openrouter.ts` (backed by ai-sdk's `generateText({ output: Output.object(...) })` — not the deprecated `generateObject`). For image input, use `analyzeImageStructured(dataUrl, prompt, ZodSchema, model)`. Never parse raw completion text manually.
 - **`delegate` agent registry**: new sub-agent types must be added to `AGENT_REGISTRY` in `server/utils/tools/delegate-agents.ts` (name → `systemPrompt` + `allowTools`); the LLM selects agents by name only — never accept `systemPrompt` as a tool argument (prompt injection vector)
