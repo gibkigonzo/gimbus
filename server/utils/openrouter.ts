@@ -1,28 +1,20 @@
-import OpenAI from 'openai'
-import Instructor from '@instructor-ai/instructor'
-import type { ZodObject, ZodRawShape } from 'zod'
-import { z } from 'zod'
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
-
-export function createOpenRouter() {
-  return new OpenAI({
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKey: process.env.OPENROUTER_API_KEY ?? ''
-  })
-}
+import { generateText, Output } from 'ai'
+import type { ModelMessage } from 'ai'
+import type { ZodObject, ZodRawShape, z } from 'zod'
+import { getModel } from './agent/model-provider'
 
 export async function structuredChat<S extends ZodObject<ZodRawShape>>(
-  messages: ChatCompletionMessageParam[],
+  messages: ModelMessage[],
   schema: S,
-  model: string
+  model: string,
+  schemaName?: string
 ): Promise<z.infer<S>> {
-  const client = createOpenRouter()
-  const instructor = Instructor({ client, mode: 'TOOLS' })
-  return instructor.chat.completions.create({
-    model,
+  const result = await generateText({
+    model: getModel(model),
     messages,
-    response_model: { schema, name: schema.description ?? 'Response' }
+    output: Output.object({ schema, name: schemaName ?? schema.description ?? 'Response' })
   })
+  return result.output
 }
 
 export async function analyzeImageStructured<S extends ZodObject<ZodRawShape>>(
@@ -31,11 +23,11 @@ export async function analyzeImageStructured<S extends ZodObject<ZodRawShape>>(
   schema: S,
   model: string
 ): Promise<z.infer<S>> {
-  const messages: ChatCompletionMessageParam[] = [
+  const messages: ModelMessage[] = [
     {
       role: 'user',
       content: [
-        { type: 'image_url', image_url: { url: imageDataUrl } },
+        { type: 'image', image: imageDataUrl },
         { type: 'text', text: prompt }
       ]
     }

@@ -10,8 +10,8 @@ export interface AgentMessage {
   content: string
   /** Parts array required by UChatMessages */
   parts: Array<
-    | { type: 'text'; text: string }
-    | { type: 'tool-result'; toolName: string; result: unknown; toolCalledWith?: string | null }
+    | { type: 'text', text: string }
+    | { type: 'tool-result', toolName: string, result: unknown, toolCalledWith?: string | null }
   >
   /** Model used for this message (assistant only) */
   model?: string | null

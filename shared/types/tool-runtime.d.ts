@@ -1,6 +1,11 @@
-import type OpenAI from 'openai'
+import type { ToolSet } from 'ai'
 
 export type ToolSourceType = 'builtin' | 'mcp'
+
+/** Shape passed as `experimental_context` to every tool's execute() — carries the request's model id. */
+export interface ToolExecContext {
+  model: string
+}
 
 export interface ToolCatalogItem {
   name: string
@@ -11,8 +16,7 @@ export interface ToolCatalogItem {
 }
 
 export interface ToolRuntimeState {
-  tools: OpenAI.Chat.Completions.ChatCompletionTool[]
-  handlers: Record<string, (args: Record<string, unknown>, model: string) => Promise<unknown>>
+  tools: ToolSet
   catalog: ToolCatalogItem[]
   defaultEnabledToolNames: string[]
   close: () => Promise<void>

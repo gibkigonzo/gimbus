@@ -120,7 +120,12 @@ async function onSubmit() {
     </template>
   </UDashboardPanel>
 
-  <UModal v-model:open="showFileBrowser" title="Biblioteka plików" description="Wybierz pliki do dołączenia do wiadomości" :ui="{ body: 'overflow-y-auto max-h-[60vh]' }">
+  <UModal
+    v-model:open="showFileBrowser"
+    title="Biblioteka plików"
+    description="Wybierz pliki do dołączenia do wiadomości"
+    :ui="{ body: 'overflow-y-auto max-h-[60vh]' }"
+  >
     <template #body>
       <FileBrowser v-model="librarySelection" />
     </template>

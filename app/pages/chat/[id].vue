@@ -3,6 +3,7 @@ import type { DefineComponent } from 'vue'
 import { useClipboard } from '@vueuse/core'
 import ProseStreamPre from '../../components/prose/PreStream.vue'
 import type { AgentMessage } from '#shared/types/agent'
+import type { UIMessage, ChatStatus } from 'ai'
 
 const components = {
   pre: ProseStreamPre as unknown as DefineComponent
@@ -16,6 +17,11 @@ const chatStatus = computed(() => {
   if (chat.error.value) return 'error'
   return chat.status.value
 })
+
+// UChatMessages/UChatPromptSubmit are typed against ai-sdk's UIMessage/ChatStatus.
+// This app deliberately uses its own AgentMessage model (includes a 'tool' role
+// with no ai-sdk equivalent) — chatStatus's 'idle' maps 1:1 onto ai-sdk's 'ready'.
+const uiChatStatus = computed<ChatStatus>(() => chatStatus.value === 'idle' ? 'ready' : chatStatus.value)
 
 const {
   isDragging,
@@ -48,6 +54,10 @@ const chat = useAgentChat({
 const chatMessages = computed(() => chat.messages.value)
 const chatError = computed(() => chat.error.value ?? undefined)
 
+// AgentMessage[] doesn't structurally match ai-sdk's UIMessage[] (different role set,
+// no ai-sdk equivalent of our 'tool' role) — bridge explicitly via `unknown` rather than `any`.
+const uiMessages = computed(() => chatMessages.value as unknown as UIMessage[])
+
 async function handleSubmit(e: Event) {
   e.preventDefault()
   if (input.value.trim() && !isUploading.value) {
@@ -62,16 +72,14 @@ async function handleSubmit(e: Event) {
 
 const copied = ref(false)
 
-function copy(_e: MouseEvent, message: AgentMessage) {
-  clipboard.copy(message.content)
+const castAgentMessage = (message: UIMessage): AgentMessage => message as unknown as AgentMessage
+
+function copy(_e: MouseEvent, message: UIMessage) {
+  clipboard.copy(castAgentMessage(message).content)
   copied.value = true
   setTimeout(() => {
     copied.value = false
   }, 2000)
-}
-
-const castAgentMessage = (message: any): AgentMessage => {
-  return message as AgentMessage
 }
 
 onMounted(() => {
@@ -110,9 +118,9 @@ watch(chat.error, (err) => {
         <UContainer class="flex-1 flex flex-col gap-4 sm:gap-6">
           <UChatMessages
             should-auto-scroll
-            :messages="chatMessages"
-            :status="chatStatus"
-            :assistant="chatStatus !== 'streaming' ? { actions: [{ label: 'Kopiuj', icon: copied ? 'i-lucide-copy-check' : 'i-lucide-copy', onClick: (copy as any) }] } : { actions: [] }"
+            :messages="uiMessages"
+            :status="uiChatStatus"
+            :assistant="chatStatus !== 'streaming' ? { actions: [{ label: 'Kopiuj', icon: copied ? 'i-lucide-copy-check' : 'i-lucide-copy', onClick: copy }] } : { actions: [] }"
             :spacing-offset="160"
             class="lg:pt-(--ui-header-height) pb-4 sm:pb-6"
           >
@@ -161,7 +169,9 @@ watch(chat.error, (err) => {
                   v-else-if="part.type === 'tool-result'"
                   class="text-xs font-mono my-1"
                 >
-                  <div class="text-muted font-semibold mb-1.5">{{ part.toolName }}</div>
+                  <div class="text-muted font-semibold mb-1.5">
+                    {{ part.toolName }}
+                  </div>
                   <template v-if="part.toolName === 'image_process' && JSON.parse(part.result as string)?.pathname">
                     <img
                       :src="`/api/blob/${JSON.parse(part.result as string).pathname}`"
@@ -270,7 +280,7 @@ watch(chat.error, (err) => {
               </div>
 
               <UChatPromptSubmit
-                :status="chatStatus"
+                :status="uiChatStatus"
                 :disabled="isUploading"
                 color="neutral"
                 size="sm"
@@ -284,7 +294,12 @@ watch(chat.error, (err) => {
     </template>
   </UDashboardPanel>
 
-  <UModal v-model:open="showFileBrowser" title="Biblioteka plików" description="Wybierz pliki do dołączenia do wiadomości" :ui="{ body: 'overflow-y-auto max-h-[60vh]' }">
+  <UModal
+    v-model:open="showFileBrowser"
+    title="Biblioteka plików"
+    description="Wybierz pliki do dołączenia do wiadomości"
+    :ui="{ body: 'overflow-y-auto max-h-[60vh]' }"
+  >
     <template #body>
       <FileBrowser v-model="librarySelection" />
     </template>

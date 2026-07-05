@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import type OpenAI from 'openai'
+import { dynamicTool, jsonSchema } from 'ai'
+import type { Tool, JSONSchema7 } from 'ai'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
@@ -23,7 +24,8 @@ interface McpConfig {
 
 interface McpRuntimeTool {
   sourceName: string
-  tool: OpenAI.Chat.Completions.ChatCompletionTool
+  name: string
+  tool: Tool
   enabledByDefault: boolean
 }
 
@@ -40,13 +42,12 @@ interface McpContentPart {
 
 export interface McpToolset {
   tools: McpRuntimeTool[]
-  handlers: Record<string, (args: Record<string, unknown>, model: string) => Promise<unknown>>
   close: () => Promise<void>
 }
 
 /**
  * Reads mcp.json from server/utils/, spawns all configured MCP servers via stdio,
- * discovers their tools, and returns them merged as OpenAI-compatible tool definitions + handlers.
+ * discovers their tools, and returns them merged as ai-sdk dynamicTool()s.
  *
  * The cwd for spawned servers is the project root (process.cwd()), so relative paths
  * in mcp.json args (e.g. "./playground") resolve relative to the project root.
@@ -58,7 +59,6 @@ export async function createMcpTools(): Promise<McpToolset> {
   const config: McpConfig = JSON.parse(raw)
 
   const allTools: McpRuntimeTool[] = []
-  const allHandlers: Record<string, (args: Record<string, unknown>, model: string) => Promise<unknown>> = {}
   const clients: McpClientRef[] = []
 
   for (const [serverName, serverConfig] of Object.entries(config.mcpServers)) {
@@ -83,44 +83,36 @@ export async function createMcpTools(): Promise<McpToolset> {
 
     const disabledByDefault = new Set(serverConfig.extended?.disabledByDefault ?? [])
 
-    const openAiTools = mcpTools
-      .map((tool): OpenAI.Chat.Completions.ChatCompletionTool => {
-        const descriptionOverride = serverConfig.extended?.descriptionOverrides?.[tool.name]
-        return {
-          type: 'function',
-          function: {
-            name: tool.name,
-            description: descriptionOverride ?? tool.description ?? '',
-            parameters: tool.inputSchema as Record<string, unknown>
-          }
+    const filteredMcpTools = mcpTools.filter((mcpTool) => {
+      if (!serverConfig.extended?.allowTools) return true
+      return serverConfig.extended.allowTools.includes(mcpTool.name)
+    })
+
+    const runtimeTools = filteredMcpTools.map((mcpTool): McpRuntimeTool => {
+      const descriptionOverride = serverConfig.extended?.descriptionOverrides?.[mcpTool.name]
+      const toolObj = dynamicTool({
+        description: descriptionOverride ?? mcpTool.description ?? '',
+        inputSchema: jsonSchema(mcpTool.inputSchema as JSONSchema7),
+        execute: async (args) => {
+          const result = await client.callTool({ name: mcpTool.name, arguments: args as Record<string, unknown> })
+          const parts = result.content as McpContentPart[]
+          return parts.map(p => p.text ?? p.data ?? '').join('\n')
         }
       })
-      .filter((tool) => {
-        if (!serverConfig.extended?.allowTools) return true
-        return serverConfig.extended.allowTools.includes(tool.function.name)
-      })
-
-    console.log(`[mcp-client] Discovered tools (${serverName}): ${openAiTools.map(t => t.function.name).join(', ')}`)
-    allTools.push(...openAiTools.map(tool => ({
-      sourceName: serverName,
-      tool,
-      enabledByDefault: !disabledByDefault.has(tool.function.name)
-    })))
-
-    const allowedNames = new Set(openAiTools.map(t => t.function.name))
-    for (const tool of mcpTools) {
-      if (!allowedNames.has(tool.name)) continue
-      allHandlers[tool.name] = async (args: Record<string, unknown>, _model: string) => {
-        const result = await client.callTool({ name: tool.name, arguments: args })
-        const parts = result.content as McpContentPart[]
-        return parts.map(p => p.text ?? p.data ?? '').join('\n')
+      return {
+        sourceName: serverName,
+        name: mcpTool.name,
+        tool: toolObj,
+        enabledByDefault: !disabledByDefault.has(mcpTool.name)
       }
-    }
+    })
+
+    console.log(`[mcp-client] Discovered tools (${serverName}): ${runtimeTools.map(t => t.name).join(', ')}`)
+    allTools.push(...runtimeTools)
   }
 
   return {
     tools: allTools,
-    handlers: allHandlers,
     close: async () => {
       for (const { client, name } of clients) {
         await client.close()

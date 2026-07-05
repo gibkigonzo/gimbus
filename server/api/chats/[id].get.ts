@@ -1,8 +1,12 @@
 import { z } from 'zod'
 import type { AgentMessage } from '#shared/types/agent'
-import type { ChatCompletionMessageToolCall } from 'openai/resources/index.mjs'
 import { getChatWithMessages } from '../../utils/db/queries'
 import { stripUserContentXml } from '../../utils/agent/history'
+
+interface StoredToolCall {
+  id: string
+  function: { name: string }
+}
 
 export default defineEventHandler(async (event) => {
   const { id } = await getValidatedRouterParams(event, z.object({
@@ -28,7 +32,7 @@ export default defineEventHandler(async (event) => {
       if (m.role === 'tool') {
         const { id } = acc[acc.length - 1] as AgentMessage
         const previousMessage = chat.messages.find(msg => msg.id === id)
-        const toolCalls = JSON.parse(previousMessage?.toolCalls ?? '[]') as ChatCompletionMessageToolCall[]
+        const toolCalls = JSON.parse(previousMessage?.toolCalls ?? '[]') as StoredToolCall[]
         const toolName = toolCalls.find(tc => tc.id === m.toolCallId)?.function?.name
 
         return [

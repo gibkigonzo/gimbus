@@ -1,13 +1,13 @@
 ---
 name: update-instructions
-description: 'Updates .github/copilot-instructions.md and README.md based on lessons and changes discovered in the current conversation. Use when new tools were added, architecture changed, conventions evolved, or outdated sections were found. Manually triggered.'
+description: 'Updates CLAUDE.md and README.md based on lessons and changes discovered in the current conversation. Use when new tools were added, architecture changed, conventions evolved, or outdated sections were found. Manually triggered.'
 argument-hint: 'Optional: topic or area to focus on (e.g. "new MCP tool", "API changes")'
 disable-model-invocation: true
 ---
 
 # Update Workspace Instructions
 
-Updates `.github/copilot-instructions.md` and `README.md` to reflect new knowledge, changed capabilities, or corrected conventions discovered in the current conversation.
+Updates `CLAUDE.md` and `README.md` to reflect new knowledge, changed capabilities, or corrected conventions discovered in the current conversation.
 
 ## When to Use
 
@@ -22,7 +22,7 @@ Trigger this skill (manually) after a conversation where:
 
 ### 1. Read current files
 
-Read `.github/copilot-instructions.md` and `README.md` in full (in parallel).
+Read `CLAUDE.md` and `README.md` in full (in parallel).
 
 ### 2. Extract lessons from conversation
 
@@ -47,7 +47,7 @@ Keep the diff minimal — only changes directly supported by the conversation.
 
 ### 4. Apply changes
 
-#### `.github/copilot-instructions.md`
+#### `CLAUDE.md`
 
 Edit using `replace_string_in_file`. Follow these rules:
 

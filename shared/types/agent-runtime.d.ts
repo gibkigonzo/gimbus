@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
+import type { ModelMessage, SystemModelMessage } from 'ai'
 
 export interface SseTextDelta {
   type: 'text-delta'
@@ -44,7 +44,7 @@ export interface LoopMessage {
   role: 'assistant' | 'tool'
   content: string | null
   // assistant fields
-  tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]
+  tool_calls?: { id: string, type: 'function', function: { name: string, arguments: string } }[]
   // tool fields
   tool_call_id?: string
   // metadata carried through the loop, not sent to the API
@@ -58,8 +58,10 @@ export interface AgentLoopResult {
 
 /** Pre-built LLM context produced by buildContext(). */
 export interface LoopContext {
-  /** Full message list ready to send to the LLM. */
-  messages: ChatCompletionMessageParam[]
+  /** Sent via streamText's dedicated `system` option rather than embedded in `messages` — ai-sdk flags in-message system roles as a prompt-injection risk. */
+  system?: SystemModelMessage
+  /** Full message list ready to send to the LLM (excludes the system message). */
+  messages: ModelMessage[]
 }
 
 export interface StreamingAgentLoopOptions {

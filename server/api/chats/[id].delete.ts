@@ -11,4 +11,3 @@ export default defineEventHandler(async (event) => {
     .where(eq(schema.chats.id, id as string))
     .returning()
 })
-

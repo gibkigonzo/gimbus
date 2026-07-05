@@ -33,7 +33,7 @@ export async function saveTurn(
         inputTokens: usage?.inputTokens ?? null,
         outputTokens: usage?.outputTokens ?? null,
         cachedTokens: usage?.cachedTokens ?? null,
-        toolCalls: msg.tool_calls ? JSON.stringify(msg.tool_calls) : null,
+        toolCalls: msg.tool_calls ? JSON.stringify(msg.tool_calls) : null
       })
     } else if (msg.role === 'tool') {
       await db.insert(schema.messages).values({
@@ -41,7 +41,7 @@ export async function saveTurn(
         content: typeof msg.content === 'string' ? msg.content : null,
         toolCallId: msg.tool_call_id ?? null,
         toolCalledWith: msg.toolCalledWith ?? null,
-        model,
+        model
       })
     }
   }

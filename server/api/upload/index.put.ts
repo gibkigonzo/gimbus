@@ -60,8 +60,7 @@ export default defineEventHandler(async (event) => {
             playgroundPath = filePath
             description = text.slice(0, 200) || null
           }
-        }
-        else if (mediaType.startsWith('image/')) {
+        } else if (mediaType.startsWith('image/')) {
           const blobData = await blob.get(obj.pathname)
           if (blobData) {
             let buffer = Buffer.from(await blobData.arrayBuffer()) as Buffer
@@ -92,8 +91,7 @@ export default defineEventHandler(async (event) => {
             playgroundPath = `playground/uploads/${fileId}/${cleanBaseName}.description.md`
             description = desc.slice(0, 200)
           }
-        }
-        else if (mediaType === 'application/pdf') {
+        } else if (mediaType === 'application/pdf') {
           const blobData = await blob.get(obj.pathname)
           if (blobData) {
             const buffer = Buffer.from(await blobData.arrayBuffer())
@@ -106,8 +104,7 @@ export default defineEventHandler(async (event) => {
             description = fullText.slice(0, 200) || null
           }
         }
-      }
-      catch (err) {
+      } catch (err) {
         console.error(`[upload] Failed to process ${obj.pathname}:`, err)
       }
 

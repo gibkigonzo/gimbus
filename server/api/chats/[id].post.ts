@@ -50,6 +50,6 @@ export default defineEventHandler(async (event) => {
     context,
     model,
     allowTools,
-    onCompleted: (result) => saveTurn(id, model, result, userContent, files)
+    onCompleted: result => saveTurn(id, model, result, userContent, files)
   })
 })

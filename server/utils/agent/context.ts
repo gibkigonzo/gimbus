@@ -1,50 +1,78 @@
 import type {
-  ChatCompletionMessageParam,
-  ChatCompletionSystemMessageParam,
-  ChatCompletionUserMessageParam,
-  ChatCompletionAssistantMessageParam,
-  ChatCompletionToolMessageParam,
-  ChatCompletionContentPartText,
-  ChatCompletionContentPartImage
-} from 'openai/resources/chat/completions'
+  ModelMessage,
+  SystemModelMessage,
+  UserModelMessage,
+  AssistantModelMessage,
+  ToolModelMessage,
+  ImagePart
+} from 'ai'
 import type { LoopContext } from '#shared/types/agent-runtime'
 import { blob } from 'hub:blob'
 import type { FileAttachment } from '#shared/utils/file'
 
-// ─── DB message → OpenAI param ───────────────────────────────────────────────
+// ─── DB message → ai-sdk ModelMessage ────────────────────────────────────────
 
 type DbMessage = Awaited<ReturnType<typeof import('../db/queries').getChatWithMessages>>['messages'][number]
 
-async function resolveImageParts(files: FileAttachment[]): Promise<ChatCompletionContentPartImage[]> {
+async function resolveImageParts(files: FileAttachment[]): Promise<ImagePart[]> {
   const parts = await Promise.all(
-    files.filter(f => f.mediaType.startsWith('image/')).map(async (f) => {
+    files.filter(f => f.mediaType.startsWith('image/')).map(async (f): Promise<ImagePart | null> => {
       const blobData = await blob.get(f.pathname)
       if (!blobData) return null
       const ab = await blobData.arrayBuffer()
       const dataUrl = `data:${f.mediaType};base64,${Buffer.from(ab).toString('base64')}`
-      return { type: 'image_url' as const, image_url: { url: dataUrl } }
+      return { type: 'image', image: dataUrl }
     })
   )
-  return parts.filter((p): p is ChatCompletionContentPartImage => p !== null)
+  return parts.filter((p): p is ImagePart => p !== null)
+}
+
+/** Finds the toolName for a tool-result row by scanning back to the preceding assistant tool_call with a matching id. */
+function findToolName(dbMessages: DbMessage[], index: number, toolCallId: string): string {
+  for (let i = index - 1; i >= 0; i--) {
+    const m = dbMessages[i]!
+    if (m.role !== 'assistant' || !m.toolCalls) continue
+    const toolCalls = JSON.parse(m.toolCalls) as { id: string, function: { name: string } }[]
+    const match = toolCalls.find(tc => tc.id === toolCallId)
+    if (match) return match.function.name
+  }
+  return 'unknown'
 }
 
 async function dbMsgToParam(
-  m: DbMessage
-): Promise<ChatCompletionSystemMessageParam | ChatCompletionUserMessageParam | ChatCompletionAssistantMessageParam | ChatCompletionToolMessageParam> {
+  m: DbMessage,
+  index: number,
+  dbMessages: DbMessage[]
+): Promise<UserModelMessage | AssistantModelMessage | ToolModelMessage> {
   switch (m.role) {
-    case 'system':
-      return {
-        role: 'system',
-        content: [{ type: 'text', text: m.content, cache_control: { type: 'ephemeral' } } as ChatCompletionContentPartText]
-      }
     case 'tool':
-      return { role: 'tool', tool_call_id: m.toolCallId!, content: m.content! }
-    case 'assistant':
+      return {
+        role: 'tool',
+        content: [{
+          type: 'tool-result',
+          toolCallId: m.toolCallId!,
+          toolName: findToolName(dbMessages, index, m.toolCallId!),
+          output: { type: 'json', value: JSON.parse(m.content!) }
+        }]
+      }
+    case 'assistant': {
+      const toolCalls = m.toolCalls ? JSON.parse(m.toolCalls) as { id: string, function: { name: string, arguments: string } }[] : undefined
+      if (!toolCalls) {
+        return { role: 'assistant', content: m.content ?? '' }
+      }
       return {
         role: 'assistant',
-        content: m.content,
-        tool_calls: m.toolCalls ? JSON.parse(m.toolCalls) : undefined
+        content: [
+          ...(m.content ? [{ type: 'text' as const, text: m.content }] : []),
+          ...toolCalls.map(tc => ({
+            type: 'tool-call' as const,
+            toolCallId: tc.id,
+            toolName: tc.function.name,
+            input: JSON.parse(tc.function.arguments)
+          }))
+        ]
       }
+    }
     default: {
       const attachments = m.attachments ? JSON.parse(m.attachments) as FileAttachment[] : undefined
       const imageParts = attachments ? await resolveImageParts(attachments) : []
@@ -63,10 +91,21 @@ async function dbMsgToParam(
  */
 export async function buildContext(
   dbMessages: DbMessage[],
-  userMessage?: { content: string; files?: FileAttachment[] }
+  userMessage?: { content: string, files?: FileAttachment[] }
 ): Promise<LoopContext> {
-  const messages: ChatCompletionMessageParam[] = await Promise.all(
-    dbMessages.map(dbMsgToParam)
+  const systemRow = dbMessages.find(m => m.role === 'system')
+  const conversationRows = dbMessages.filter(m => m.role !== 'system')
+
+  const system: SystemModelMessage | undefined = systemRow
+    ? {
+        role: 'system',
+        content: systemRow.content!,
+        providerOptions: { openrouter: { cacheControl: { type: 'ephemeral' } } }
+      }
+    : undefined
+
+  const messages: ModelMessage[] = await Promise.all(
+    conversationRows.map((m, index) => dbMsgToParam(m, index, conversationRows))
   )
 
   if (userMessage) {
@@ -76,8 +115,8 @@ export async function buildContext(
       content: imageParts.length > 0
         ? [...imageParts, { type: 'text' as const, text: userMessage.content }]
         : userMessage.content
-    } satisfies ChatCompletionUserMessageParam)
+    } satisfies UserModelMessage)
   }
 
-  return { messages }
+  return { system, messages }
 }

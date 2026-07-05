@@ -1,0 +1,154 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { SseChunk } from '#shared/types/agent-runtime'
+import type { TextStreamPart, ToolSet, LanguageModelUsage } from 'ai'
+
+type FakePart = Partial<TextStreamPart<ToolSet>> & { type: string }
+
+function fakeUsage(inputTokens: number, outputTokens: number, cacheReadTokens: number): LanguageModelUsage {
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    inputTokenDetails: { cacheReadTokens, noCacheTokens: inputTokens - cacheReadTokens, cacheWriteTokens: 0 },
+    outputTokenDetails: { textTokens: outputTokens, reasoningTokens: 0 }
+  }
+}
+
+const streamTextMock = vi.fn()
+const stepCountIsMock = vi.fn((n: number) => ({ __stepCount: n }))
+
+vi.mock('ai', () => ({
+  streamText: (...args: unknown[]) => streamTextMock(...args),
+  stepCountIs: (...args: [number]) => stepCountIsMock(...args)
+}))
+
+vi.mock('./model-provider', () => ({
+  getModel: (modelId: string) => ({ modelId })
+}))
+
+const { runAgentLoopCore, mapStreamPartToSse } = await import('./core-loop')
+
+async function* toAsyncIterable<T>(items: T[]): AsyncGenerator<T> {
+  for (const item of items) yield item
+}
+
+function fakeStreamTextResult(parts: FakePart[], steps: object[]) {
+  return {
+    fullStream: toAsyncIterable(parts),
+    steps: Promise.resolve(steps)
+  }
+}
+
+function map(part: FakePart, model: string): SseChunk | null {
+  return mapStreamPartToSse(part as TextStreamPart<ToolSet>, model)
+}
+
+describe('mapStreamPartToSse', () => {
+  const model = 'openai/gpt-4o-mini'
+
+  it('maps text-delta', () => {
+    expect(map({ type: 'text-delta', text: 'hi' }, model))
+      .toEqual({ type: 'text-delta', text: 'hi' })
+  })
+
+  it('maps tool-result', () => {
+    const chunk = map({ type: 'tool-result', toolName: 'manage_tasks', input: { a: 1 }, output: { ok: true } }, model)
+    expect(chunk).toEqual({ type: 'tool-result', toolName: 'manage_tasks', result: { ok: true }, model, toolCalledWith: JSON.stringify({ a: 1 }) })
+  })
+
+  it('maps tool-error defensively to a tool-result shape with {error}', () => {
+    const chunk = map({ type: 'tool-error', toolName: 'analyze_image', input: {}, error: new Error('boom') }, model)
+    expect(chunk).toEqual({ type: 'tool-result', toolName: 'analyze_image', result: { error: 'boom' }, model, toolCalledWith: '{}' })
+  })
+
+  it('maps finish-step to usage', () => {
+    const chunk = map({
+      type: 'finish-step',
+      usage: fakeUsage(10, 5, 3)
+    }, model)
+    expect(chunk).toEqual({ type: 'usage', inputTokens: 10, outputTokens: 5, cachedTokens: 3, model })
+  })
+
+  it('maps error', () => {
+    const chunk = map({ type: 'error', error: new Error('stream failed') }, model)
+    expect(chunk).toEqual({ type: 'error', message: 'stream failed' })
+  })
+
+  it('returns null for an abort part (no SSE emission)', () => {
+    expect(map({ type: 'abort' }, model)).toBeNull()
+  })
+
+  it('returns null for irrelevant parts (tool-call, start-step, finish, raw)', () => {
+    for (const type of ['tool-call', 'start-step', 'finish', 'raw', 'start'] as const) {
+      expect(map({ type }, model)).toBeNull()
+    }
+  })
+})
+
+describe('runAgentLoopCore', () => {
+  beforeEach(() => {
+    streamTextMock.mockReset()
+    stepCountIsMock.mockClear()
+  })
+
+  it('passes stepCountIs(60) as stopWhen', async () => {
+    streamTextMock.mockReturnValue(fakeStreamTextResult([], []))
+    await runAgentLoopCore(() => {}, { messages: [] }, {}, [], 'openai/gpt-4o-mini')
+    expect(stepCountIsMock).toHaveBeenCalledWith(60)
+    expect(streamTextMock.mock.calls[0]![0]).toMatchObject({ stopWhen: { __stepCount: 60 } })
+  })
+
+  it('builds alternating assistant/tool LoopMessages across multiple steps, with one usage entry per step', async () => {
+    const steps = [
+      {
+        text: '',
+        toolCalls: [{ toolCallId: 'call_1', toolName: 'manage_tasks', input: { operation: 'list' } }],
+        toolResults: [{ toolCallId: 'call_1', input: { operation: 'list' }, output: { tasks: [] } }],
+        usage: fakeUsage(100, 20, 10)
+      },
+      {
+        text: 'All done.',
+        toolCalls: [],
+        toolResults: [],
+        usage: fakeUsage(50, 5, 0)
+      }
+    ]
+    streamTextMock.mockReturnValue(fakeStreamTextResult([], steps))
+
+    const pushSse = vi.fn()
+    const result = await runAgentLoopCore(pushSse, { messages: [] }, {}, [], 'openai/gpt-4o-mini')
+
+    expect(result.messages).toEqual([
+      { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'manage_tasks', arguments: '{"operation":"list"}' } }] },
+      { role: 'tool', content: '{"tasks":[]}', tool_call_id: 'call_1', toolCalledWith: '{"operation":"list"}' },
+      { role: 'assistant', content: 'All done.', tool_calls: undefined }
+    ])
+    expect(result.usagePerTurn).toEqual([
+      { inputTokens: 100, outputTokens: 20, cachedTokens: 10 },
+      { inputTokens: 50, outputTokens: 5, cachedTokens: 0 }
+    ])
+  })
+
+  it('produces no error SSE chunk when the stream is aborted mid-loop', async () => {
+    streamTextMock.mockReturnValue(fakeStreamTextResult([{ type: 'abort' }], []))
+    const pushSse = vi.fn<(chunk: SseChunk) => void>()
+    await runAgentLoopCore(pushSse, { messages: [] }, {}, [], 'openai/gpt-4o-mini')
+
+    const chunkTypes = pushSse.mock.calls.map(([c]) => c.type)
+    expect(chunkTypes).not.toContain('error')
+    expect(chunkTypes).toContain('done')
+  })
+
+  it('always ends with a done chunk, even when streamText throws before any part is emitted', async () => {
+    streamTextMock.mockImplementation(() => {
+      throw new Error('network down')
+    })
+    const pushSse = vi.fn<(chunk: SseChunk) => void>()
+    const result = await runAgentLoopCore(pushSse, { messages: [] }, {}, [], 'openai/gpt-4o-mini')
+
+    const chunks = pushSse.mock.calls.map(([c]) => c)
+    expect(chunks.at(-1)).toEqual({ type: 'done' })
+    expect(chunks.some(c => c.type === 'error' && c.message === 'network down')).toBe(true)
+    expect(result.messages).toEqual([])
+  })
+})

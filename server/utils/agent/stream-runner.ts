@@ -1,6 +1,6 @@
 import { createEventStream } from 'h3'
 import { runAgentLoopCore } from './core-loop'
-import { resolveToolsByAllowList } from './tool-selection'
+import { resolveActiveToolNames } from './tool-selection'
 
 export function runStreamingAgentLoop(options: StreamingAgentLoopOptions) {
   const eventStream = createEventStream(options.event)
@@ -13,18 +13,13 @@ export function runStreamingAgentLoop(options: StreamingAgentLoopOptions) {
 
   async function runProcessing() {
     try {
-      const { tools, handlers } = resolveToolsByAllowList(
-        runtime.tools,
-        runtime.handlers,
-        runtime.defaultEnabledToolNames,
-        options.allowTools
-      )
+      const activeToolNames = resolveActiveToolNames(runtime.defaultEnabledToolNames, options.allowTools)
 
       const result = await runAgentLoopCore(
         chunk => eventStream.push(JSON.stringify(chunk)),
         options.context,
-        tools,
-        handlers,
+        runtime.tools,
+        activeToolNames,
         options.model,
         abortController.signal
       )

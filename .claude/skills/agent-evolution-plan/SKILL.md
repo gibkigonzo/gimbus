@@ -19,14 +19,14 @@ Trigger this skill when you have:
 ## Inputs
 
 1. **Knowledge source** — the file provided as argument (or referenced in the prompt)
-2. **Project state** — read from `.github/copilot-instructions.md`
+2. **Project state** — read from `CLAUDE.md`
 
 ## Procedure
 
 ### 1. Read both sources
 
 - Read the provided knowledge file in full
-- Read `.github/copilot-instructions.md` to understand what the project currently does
+- Read `CLAUDE.md` to understand what the project currently does
 
 ### 2. Extract insights from the knowledge source
 

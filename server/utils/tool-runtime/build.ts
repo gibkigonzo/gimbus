@@ -1,62 +1,57 @@
-import type OpenAI from 'openai'
+import type { Tool, ToolSet } from 'ai'
 import { createMcpTools } from '../mcp-client'
-import { manageTasksTool, handleManageTasks } from '../tools/tasks'
-import { imageProcessTool, handleImageProcess } from '../tools/image-process'
-import { analyzeImageTool, handleAnalyzeImage } from '../tools/analyze-image'
-import { publishForDownloadTool, handlePublishForDownload } from '../tools/publish-for-download'
-import { delegateTool, createDelegateHandler } from '../tools/delegate'
-import { analyzeSensorsTool, handleAnalyzeSensors } from '../tools/sensor-analysis'
+import { manageTasksTool } from '../tools/tasks'
+import { imageProcessTool } from '../tools/image-process'
+import { analyzeImageTool } from '../tools/analyze-image'
+import { publishForDownloadTool } from '../tools/publish-for-download'
+import { createDelegateHandler } from '../tools/delegate'
 
 export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
-  const handlers: Record<string, (args: Record<string, unknown>, model: string) => Promise<unknown>> = {}
-  const toolsByName = new Map<string, OpenAI.Chat.Completions.ChatCompletionTool>()
+  const toolsByName = new Map<string, Tool>()
   const catalog: ToolCatalogItem[] = []
 
   const registerTool = (
     sourceType: ToolSourceType,
     sourceName: string,
-    tool: OpenAI.Chat.Completions.ChatCompletionTool,
-    handler: (args: Record<string, unknown>, model: string) => Promise<unknown>,
+    name: string,
+    tool: Tool,
     enabledByDefault: boolean
   ) => {
-    const toolName = tool.function.name
-    if (toolsByName.has(toolName)) {
-      console.warn(`[tool-runtime] Skipping duplicate tool '${toolName}' from '${sourceName}'`)
+    if (toolsByName.has(name)) {
+      console.warn(`[tool-runtime] Skipping duplicate tool '${name}' from '${sourceName}'`)
       return
     }
 
-    toolsByName.set(toolName, tool)
-    handlers[toolName] = handler
+    toolsByName.set(name, tool)
 
     catalog.push({
-      name: toolName,
-      description: tool.function.description ?? '',
+      name,
+      description: tool.description ?? '',
       sourceType,
       sourceName,
       enabledByDefault
     })
   }
 
-  registerTool('builtin', 'built-in', manageTasksTool, handleManageTasks, true)
-  registerTool('builtin', 'built-in', imageProcessTool, handleImageProcess, true)
-  registerTool('builtin', 'built-in', analyzeImageTool, handleAnalyzeImage, true)
-  registerTool('builtin', 'built-in', publishForDownloadTool, handlePublishForDownload, true)
-  registerTool('builtin', 'built-in', analyzeSensorsTool, handleAnalyzeSensors, true)
+  registerTool('builtin', 'built-in', 'manage_tasks', manageTasksTool, true)
+  registerTool('builtin', 'built-in', 'image_process', imageProcessTool, true)
+  registerTool('builtin', 'built-in', 'analyze_image', analyzeImageTool, true)
+  registerTool('builtin', 'built-in', 'publish_for_download', publishForDownloadTool, true)
 
   const mcp = await createMcpTools()
   for (const mcpTool of mcp.tools) {
-    const handler = mcp.handlers[mcpTool.tool.function.name]
-    if (!handler) continue
-    registerTool('mcp', mcpTool.sourceName, mcpTool.tool, handler, mcpTool.enabledByDefault)
+    registerTool('mcp', mcpTool.sourceName, mcpTool.name, mcpTool.tool, mcpTool.enabledByDefault)
   }
 
-  // delegate must be registered last — its handler closes over the complete handlers + tools maps
-  const delegateHandler = createDelegateHandler(handlers, Array.from(toolsByName.values()))
-  registerTool('builtin', 'built-in', delegateTool, delegateHandler, false)
+  // delegate must be registered last — its handler closes over the complete tool set
+  const delegateTool = createDelegateHandler(
+    Object.fromEntries(toolsByName) as ToolSet,
+    Array.from(toolsByName.keys())
+  )
+  registerTool('builtin', 'built-in', 'delegate', delegateTool, false)
 
   return {
-    tools: Array.from(toolsByName.values()),
-    handlers,
+    tools: Object.fromEntries(toolsByName) as ToolSet,
     catalog,
     defaultEnabledToolNames: catalog.filter(t => t.enabledByDefault).map(t => t.name),
     close: mcp.close

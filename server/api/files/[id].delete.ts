@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
   // Delete playground description file
   if (file.descriptionPath) {
     const descAbs = path.join(playgroundRoot, file.descriptionPath)
-    await fs.unlink(descAbs).catch(err => {
+    await fs.unlink(descAbs).catch((err) => {
       if (err.code !== 'ENOENT') console.error('[delete-file] Failed to delete description:', descAbs, err)
     })
   }
@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
   // Delete playground text/description file
   if (file.playgroundPath) {
     const targetAbs = path.join(playgroundRoot, file.playgroundPath)
-    await fs.unlink(targetAbs).catch(err => {
+    await fs.unlink(targetAbs).catch((err) => {
       if (err.code !== 'ENOENT') console.error('[delete-file] Failed to delete file:', targetAbs, err)
     })
   }
