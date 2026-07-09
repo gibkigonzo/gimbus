@@ -20,6 +20,8 @@ export interface SseUsage {
   outputTokens: number
   cachedTokens: number
   model: string
+  /** True when this step's finishReason was 'length' — the model was cut off by maxOutputTokens before finishing its text/tool call. */
+  truncated: boolean
 }
 
 export interface SseDone {

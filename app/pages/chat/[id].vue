@@ -216,9 +216,11 @@ watch(chat.error, (err) => {
                 </div>
               </template>
 
-              <!-- Token usage (assistant messages only) -->
+              <!-- Token usage: each step's cost lands on whichever message that step
+                   produced — a pure tool-calling step (no text output) still has one,
+                   attached to its tool-result message, not the assistant role only -->
               <div
-                v-if="castAgentMessage(message).role === 'assistant' && (castAgentMessage(message).inputTokens || castAgentMessage(message).outputTokens)"
+                v-if="(castAgentMessage(message).role === 'assistant' || castAgentMessage(message).role === 'tool') && (castAgentMessage(message).inputTokens || castAgentMessage(message).outputTokens)"
                 class="flex items-center gap-1.5 mt-2 flex-wrap"
               >
                 <UBadge
@@ -237,6 +239,13 @@ watch(chat.error, (err) => {
                   v-if="castAgentMessage(message).cachedTokens"
                   :label="`cache: ${castAgentMessage(message).cachedTokens}`"
                   color="success"
+                  variant="subtle"
+                  size="lg"
+                />
+                <UBadge
+                  v-if="castAgentMessage(message).truncated"
+                  label="ucięte — limit tokenów"
+                  color="warning"
                   variant="subtle"
                   size="lg"
                 />

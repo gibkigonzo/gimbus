@@ -63,4 +63,34 @@ describe('useAgentChat', () => {
     expect(chat.status.value).toBe('idle')
     expect(chat.error.value).toBeNull()
   })
+
+  it('attaches usage to the tool-result message for a pure tool-calling step (no text-delta)', async () => {
+    fetchMock.mockResolvedValue(sseResponse([
+      { type: 'tool-result', toolName: 'manage_tasks', result: { tasks: [] }, model: 'anthropic/claude-sonnet-4.6', toolCalledWith: '{}' },
+      { type: 'usage', inputTokens: 100, outputTokens: 20, cachedTokens: 0, model: 'anthropic/claude-sonnet-4.6', truncated: false },
+      { type: 'done' }
+    ]))
+
+    const chat = useAgentChat({ chatId: 'chat-1' })
+    await chat.sendMessage('hello')
+
+    const toolMessage = chat.messages.value.at(-1)!
+    expect(toolMessage.role).toBe('tool')
+    expect(toolMessage.inputTokens).toBe(100)
+    expect(toolMessage.outputTokens).toBe(20)
+    expect(toolMessage.truncated).toBe(false)
+  })
+
+  it('marks a message truncated when its step was cut off by the output token limit', async () => {
+    fetchMock.mockResolvedValue(sseResponse([
+      { type: 'text-delta', text: 'partial' },
+      { type: 'usage', inputTokens: 6586, outputTokens: 8192, cachedTokens: 6258, model: 'anthropic/claude-sonnet-4.6', truncated: true },
+      { type: 'done' }
+    ]))
+
+    const chat = useAgentChat({ chatId: 'chat-1' })
+    await chat.sendMessage('hello')
+
+    expect(chat.messages.value.at(-1)).toMatchObject({ role: 'assistant', content: 'partial', truncated: true })
+  })
 })

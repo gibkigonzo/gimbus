@@ -13,10 +13,12 @@ export interface AgentMessage {
     | { type: 'text', text: string }
     | { type: 'tool-result', toolName: string, result: unknown, toolCalledWith?: string | null }
   >
-  /** Model used for this message (assistant only) */
+  /** Model used for this message (assistant or tool — a tool-only step still reports the model that made the call) */
   model?: string | null
-  /** Token usage stats (assistant only) */
+  /** Token usage stats for the step that produced this message (assistant or tool — a step with no text output still has a cost) */
   inputTokens?: number | null
   outputTokens?: number | null
   cachedTokens?: number | null
+  /** True when this step's usage came from a finishReason: 'length' step — the model was cut off by maxOutputTokens */
+  truncated?: boolean | null
 }

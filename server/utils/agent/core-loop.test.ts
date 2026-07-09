@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { SseChunk } from '#shared/types/agent-runtime'
-import type { TextStreamPart, ToolSet, LanguageModelUsage } from 'ai'
+import type { TextStreamPart, ToolSet, LanguageModelUsage, ModelMessage } from 'ai'
 
 type FakePart = Partial<TextStreamPart<ToolSet>> & { type: string }
 
@@ -64,9 +64,19 @@ describe('mapStreamPartToSse', () => {
   it('maps finish-step to usage', () => {
     const chunk = map({
       type: 'finish-step',
-      usage: fakeUsage(10, 5, 3)
+      usage: fakeUsage(10, 5, 3),
+      finishReason: 'tool-calls'
     }, model)
-    expect(chunk).toEqual({ type: 'usage', inputTokens: 10, outputTokens: 5, cachedTokens: 3, model })
+    expect(chunk).toEqual({ type: 'usage', inputTokens: 10, outputTokens: 5, cachedTokens: 3, model, truncated: false })
+  })
+
+  it('flags a step cut off by the output token limit as truncated', () => {
+    const chunk = map({
+      type: 'finish-step',
+      usage: fakeUsage(6586, 8192, 6258),
+      finishReason: 'length'
+    }, model)
+    expect(chunk).toEqual({ type: 'usage', inputTokens: 6586, outputTokens: 8192, cachedTokens: 6258, model, truncated: true })
   })
 
   it('maps error', () => {
@@ -124,6 +134,25 @@ describe('markLastMessageCacheable', () => {
     const result = markLastMessageCacheable(messages)
     expect(result).not.toBe(messages)
     expect(messages[0]).toEqual({ role: 'user', content: 'hi' })
+  })
+
+  it('moves the breakpoint instead of accumulating one per step, across many simulated steps', () => {
+    // Mirrors what prepareStep actually does: each "step" appends a new message
+    // to the array streamText already carries forward (including whatever
+    // markLastMessageCacheable left on it from the previous step), then calls
+    // markLastMessageCacheable again on the whole thing.
+    let messages: ModelMessage[] = [{ role: 'user', content: 'first' }]
+    for (let step = 0; step < 6; step++) {
+      messages = markLastMessageCacheable(messages)
+      messages = [...messages, { role: 'assistant', content: `step ${step}` }]
+    }
+    messages = markLastMessageCacheable(messages)
+
+    const withMarker = messages.filter(
+      m => (m.providerOptions as { openrouter?: { cacheControl?: unknown } } | undefined)?.openrouter?.cacheControl
+    )
+    expect(withMarker).toHaveLength(1)
+    expect(withMarker[0]).toBe(messages[messages.length - 1])
   })
 })
 

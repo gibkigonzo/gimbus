@@ -115,12 +115,18 @@ export function useAgentChat({ chatId, initialMessages = [] }: UseAgentChatOptio
               model: chunk.model
             })
           } else if (chunk.type === 'usage') {
-            const lastAssistantMessage = messages.value.findLast(m => m.role === 'assistant')!
-            if (lastAssistantMessage) {
-              lastAssistantMessage.inputTokens = chunk.inputTokens
-              lastAssistantMessage.outputTokens = chunk.outputTokens
-              lastAssistantMessage.cachedTokens = chunk.cachedTokens
-              lastAssistantMessage.model = chunk.model
+            // A step's usage lands on whichever message that step actually produced —
+            // a pure tool-calling step never emits a text-delta, so it never creates
+            // an assistant-role message; the just-pushed tool-result message is the
+            // real target. Filtering to role === 'assistant' here silently dropped
+            // (or misattributed to a stale earlier message) all usage for tool-only steps.
+            const lastMessage = messages.value[messages.value.length - 1]
+            if (lastMessage) {
+              lastMessage.inputTokens = chunk.inputTokens
+              lastMessage.outputTokens = chunk.outputTokens
+              lastMessage.cachedTokens = chunk.cachedTokens
+              lastMessage.model = chunk.model
+              lastMessage.truncated = chunk.truncated
             }
           } else if (chunk.type === 'title') {
             refreshNuxtData('/api/chats')

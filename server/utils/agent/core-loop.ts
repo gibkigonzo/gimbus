@@ -20,20 +20,33 @@ export const MAX_OUTPUT_TOKENS = 8192
  * moves, so every step past the first pays full price for the growing tail. Re-marking
  * the last message on every step, via `prepareStep`, keeps the whole prior prefix cached
  * and only charges for the delta generated since the previous step.
+ *
+ * Moving the breakpoint means exactly that — any earlier message still carrying a
+ * marker from a previous step's call must have it stripped, otherwise markers pile
+ * up one per step instead of relocating, and requests eventually exceed the
+ * provider's max cache-block count (Anthropic/Azure: 4 total, including the
+ * system prompt's own separate breakpoint from context.ts).
  */
 export function markLastMessageCacheable(messages: ModelMessage[]): ModelMessage[] {
   if (messages.length === 0) return messages
-  const last = messages[messages.length - 1]!
-  return [
-    ...messages.slice(0, -1),
-    {
-      ...last,
-      providerOptions: {
-        ...last.providerOptions,
-        openrouter: { cacheControl: { type: 'ephemeral' } }
+  const lastIndex = messages.length - 1
+  return messages.map((message, index) => {
+    if (index === lastIndex) {
+      return {
+        ...message,
+        providerOptions: {
+          ...message.providerOptions,
+          openrouter: { cacheControl: { type: 'ephemeral' } }
+        }
       }
     }
-  ]
+
+    if (!message.providerOptions?.openrouter) return message
+    const { openrouter: _openrouter, ...providerOptions } = message.providerOptions
+    if (Object.keys(providerOptions).length > 0) return { ...message, providerOptions }
+    const { providerOptions: _providerOptions, ...rest } = message
+    return rest as ModelMessage
+  })
 }
 
 /**
@@ -55,7 +68,8 @@ export function mapStreamPartToSse(part: TextStreamPart<ToolSet>, model: string)
         inputTokens: part.usage.inputTokens ?? 0,
         outputTokens: part.usage.outputTokens ?? 0,
         cachedTokens: part.usage.inputTokenDetails?.cacheReadTokens ?? 0,
-        model
+        model,
+        truncated: part.finishReason === 'length'
       }
     case 'error':
       return { type: 'error', message: String((part.error as Error)?.message ?? part.error) }
@@ -113,6 +127,13 @@ export async function runAgentLoopCore(
       const chunk = mapStreamPartToSse(part, model)
       if (chunk) {
         if (chunk.type === 'error') console.error('[agent] Stream error', chunk.message)
+        if (chunk.type === 'usage' && chunk.truncated) {
+          // A truncated step with no completed tool call looks identical to "the
+          // model is done" to ai-sdk's step-continuation logic — the agent loop
+          // silently ends the turn here instead of erroring, so this is the only
+          // place the cutoff is visible without inspecting raw usage numbers.
+          console.warn(`[agent] Step hit maxOutputTokens (${MAX_OUTPUT_TOKENS}) and was cut off (finishReason: length) — the turn may have ended without completing its response or tool call`)
+        }
         await pushSse(chunk)
       }
     }
