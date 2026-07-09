@@ -19,6 +19,7 @@ export function useTools() {
 
   const selectedToolNames = useCookie<string[]>('allowTools', { default: () => [] })
   const selectedInitialized = useCookie<boolean>('allowToolsInitialized', { default: () => false })
+  const knownToolNames = useCookie<string[]>('knownToolNames', { default: () => [] })
 
   async function ensureLoaded() {
     if (isLoaded.value || isLoading.value) return
@@ -35,9 +36,19 @@ export function useTools() {
         selectedToolNames.value = data.defaultEnabledToolNames.filter(name => validNames.has(name))
         selectedInitialized.value = true
       } else {
-        selectedToolNames.value = selectedToolNames.value.filter(name => validNames.has(name))
+        // A tool the server now marks enabledByDefault but this browser has
+        // never seen before (added after this cookie was first initialized)
+        // is unioned in — otherwise a newly-added default-on tool would never
+        // reach a returning user, who'd have to find and toggle it manually.
+        const knownNames = new Set(knownToolNames.value)
+        const newlyAddedDefaults = data.defaultEnabledToolNames.filter(name => validNames.has(name) && !knownNames.has(name))
+        selectedToolNames.value = [
+          ...selectedToolNames.value.filter(name => validNames.has(name)),
+          ...newlyAddedDefaults
+        ]
       }
 
+      knownToolNames.value = data.tools.map(tool => tool.name)
       isLoaded.value = true
     } finally {
       isLoading.value = false

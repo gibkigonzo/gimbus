@@ -1,6 +1,6 @@
 /**
  * Shared response-shape convention for built-in tools, generalizing the ad hoc
- * pattern already used by hub-shell.ts's shapeFetchError (spread optional
+ * pattern already used by fetch-error.ts's shapeFetchError (spread optional
  * fields onto a required core field). `error` stays the primary/required field
  * on failure (matches every existing tool's `{ error }` shape and the
  * project's "execute must self-catch" convention); `next_action`/`recovery`/

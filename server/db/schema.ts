@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { relations } from 'drizzle-orm'
 
 const timestamps = {
@@ -52,3 +52,18 @@ export const files = sqliteTable('files', {
   size: integer('size').notNull(),
   ...timestamps
 })
+
+// Global, cross-chat memory for the `recall`/`remember` tools — not scoped by
+// chatId. Each fact is its own row, written via an atomic upsert on
+// (category, key), so no optimistic-concurrency version field is needed
+// (unlike the whole-blob useStorage KV pattern used by manage_tasks).
+export const memories = sqliteTable('memories', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  category: text('category').notNull(),
+  key: text('key').notNull(),
+  value: text('value').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
+}, table => [
+  uniqueIndex('memories_category_key_idx').on(table.category, table.key)
+])

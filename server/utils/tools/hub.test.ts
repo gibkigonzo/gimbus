@@ -4,11 +4,11 @@ import type { ToolExecutionOptions } from 'ai'
 const fetchMock = vi.fn()
 vi.stubGlobal('$fetch', (...args: unknown[]) => fetchMock(...args))
 
-const { hubSubmitAnswerTool } = await import('./hub-shell')
+const { hubSubmitAnswerTool } = await import('./hub')
 
 const toolOptions: ToolExecutionOptions = { toolCallId: 'call_1', messages: [] }
 
-function submitAnswer(task: string, answer: Record<string, unknown>) {
+function submitAnswer(task: string, answer: Record<string, unknown> | unknown[]) {
   return hubSubmitAnswerTool.execute!({ task, answer }, toolOptions)
 }
 
@@ -28,10 +28,21 @@ describe('hub_submit_answer', () => {
     expect(result.result).toEqual({ code: 0, message: 'ok' })
   })
 
+  it('forwards an array answer unchanged', async () => {
+    fetchMock.mockResolvedValue({ code: 0, message: 'ok' })
+    const answer = ['wehicle_name', 'right', 'right', 'up']
+    const result = await submitAnswer('savethem', answer) as { result?: unknown }
+    expect(fetchMock).toHaveBeenCalledWith('https://hub.ag3nts.org/verify', {
+      method: 'POST',
+      body: { apikey: 'test-key', task: 'savethem', answer }
+    })
+    expect(result.result).toEqual({ code: 0, message: 'ok' })
+  })
+
   it('shapes errors instead of throwing', async () => {
     fetchMock.mockRejectedValue({ statusCode: 400, statusMessage: 'Bad Request' })
-    const result = await submitAnswer('firmware', { confirmation: 'wrong' }) as { error: string, statusCode: number }
+    const result = await submitAnswer('firmware', { confirmation: 'wrong' }) as { error: string, diagnostics: { statusCode: number } }
     expect(result.error).toBe('Bad Request')
-    expect(result.statusCode).toBe(400)
+    expect(result.diagnostics.statusCode).toBe(400)
   })
 })

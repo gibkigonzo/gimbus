@@ -13,6 +13,9 @@ The agent has access to tools selected per-conversation:
 | Tool | What it does |
 |------|-------------|
 | `manage_tasks` | Maintains a task checklist across the conversation turn — add, complete, remove, list |
+| `think` | Lets the agent pause and externalize its reasoning before acting |
+| `recall` | Gradually looks up the agent's own persona/mood and known facts about you |
+| `remember` | Stores a new long-term fact about the agent's persona or about you |
 | `analyze_image` | Asks a targeted vision question about an uploaded image |
 | `image_process` | Apply transforms to an uploaded image (grayscale, b/w, resize, rotate, format conversion) |
 | `publish_for_download` | Publishes a playground file (or reassembled chunks) to blob storage and returns a download URL |
@@ -35,6 +38,9 @@ Switch between models per conversation from a dropdown. All models routed via Op
 
 ### Per-request tool selection
 A tool picker lets you enable or disable individual tools before sending a message. The selection is persisted in a cookie so it survives page reloads.
+
+### Long-term memory & persona
+The agent has its own persona (name, mood, opinions) and an evolving sense of you, stored across every conversation — not handed to it upfront. It discovers this gradually via `recall` and can save new facts via `remember`, so its personality and what it knows about you build up over time instead of resetting each chat.
 
 ### Token usage tracking
 Input tokens, output tokens, and cached tokens are recorded per assistant message and displayed in the UI.
