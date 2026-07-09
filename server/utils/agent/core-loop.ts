@@ -8,8 +8,12 @@ import { waitForConfirmation, resolveConfirmation } from '../tool-runtime/confir
 const MAX_ITERATIONS = 60
 // Per-step cap, not per-model config: prevents a model's own (much larger) default
 // ceiling from being requested outright, which OpenRouter rejects outright when the
-// account's available credit balance is below that ceiling.
-export const MAX_OUTPUT_TOKENS = 8192
+// account's available credit balance is below that ceiling. Raised from 8192 after
+// two independent models (Claude Sonnet 4.6, then Deepseek v4-pro) both hit
+// finishReason: 'length' at exactly the old cap on the same reasoning-heavy
+// multi-constraint route-planning task — 8192 was empirically too low for a single
+// step that reasons over a 10x10 grid under two competing resource constraints.
+export const MAX_OUTPUT_TOKENS = 24576
 
 /**
  * Moves the (non-system) cache breakpoint to the last message of the current step.
