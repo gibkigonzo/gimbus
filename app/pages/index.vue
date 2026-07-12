@@ -5,7 +5,7 @@ const chatId = crypto.randomUUID()
 const librarySelection = ref<FileAttachment[]>([])
 const showFileBrowser = ref(false)
 const { model } = useModels()
-const { ensureLoaded: ensureToolsLoaded } = useTools()
+const { ensureLoaded: ensureToolsLoaded, selectedToolNames } = useTools()
 await ensureToolsLoaded()
 
 const {
@@ -34,6 +34,17 @@ async function createChat(prompt: string) {
       ...(attachments.length > 0 ? { files: attachments } : {})
     }
   })
+
+  // Captures the tool selection shown *right now* so chat/[id].vue's own
+  // first-turn auto-trigger (a separate request, fired later after
+  // navigation + that page's own mount) uses exactly this, not whatever the
+  // shared `allowTools` cookie happens to read at that later moment — e.g.
+  // reopening the tools popover on the new chat page before the auto-trigger
+  // fires would otherwise silently change what the first turn actually runs
+  // with, despite looking correct at submission time.
+  if (chat?.id) {
+    sessionStorage.setItem(`gimbus:allowTools:${chat.id}`, JSON.stringify(selectedToolNames.value))
+  }
 
   refreshNuxtData('chats')
   // `?new=1` is a one-shot signal consumed and stripped by chat/[id].vue on

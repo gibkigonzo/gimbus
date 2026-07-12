@@ -25,6 +25,8 @@ The agent has access to tools selected per-conversation:
 | `search_files` | Search files by name or content pattern |
 | `write_file` / `edit_file` | Write or patch files — opt-in, disabled by default |
 | `run_code` | Runs a JavaScript snippet in an isolated sandbox for computation or bulk file operations — opt-in, disabled by default |
+| `list_skills` / `get_skill` | Look up predefined instruction snippets ("skills") relevant to the current request |
+| `save_skill` | Save a reusable instruction snippet for later reuse — opt-in, disabled by default |
 
 ### File attachments
 Drag-and-drop or pick **images, PDFs, and CSVs** (up to 8 MB). Images get a vision-generated description file; PDFs and large text files are chunked. Attachments are stored in NuxtHub Blob and referenced in messages — the agent can read, analyze, and publish them.
@@ -32,17 +34,24 @@ Drag-and-drop or pick **images, PDFs, and CSVs** (up to 8 MB). Images get a visi
 ### Model selection
 Switch between models per conversation from a dropdown. All models routed via OpenRouter:
 
-- **GPT-5 Nano** — fast and cheap
 - **GPT-4o Mini** — balanced capability
-- **DeepSeek V4 Pro**
-- **Gemma 4 31B IT** — free-tier open model
-- **Claude Sonnet 4.6**
+- **DeepSeek-V4-Pro**
+- **GPT-OSS-120B**
+- **Qwen-3-30B-A3B-Thinking**
+- **Qwen-Plus**
+- **GPT-4.1 Mini**
 
 ### Per-request tool selection
 A tool picker lets you enable or disable individual tools before sending a message. The selection is persisted in a cookie so it survives page reloads.
 
 ### Long-term memory & persona
 The agent has its own persona (name, mood, opinions) and an evolving sense of you, stored across every conversation — not handed to it upfront. It discovers this gradually via `recall` and can save new facts via `remember`, so its personality and what it knows about you build up over time instead of resetting each chat.
+
+### Skills
+Reusable instruction snippets — recurring patterns or preferences worth applying again later — that the agent can look up via `list_skills`/`get_skill`, or you can pull in explicitly by starting a message with `/skill-name`. Save a new one with `save_skill`.
+
+### Direct sub-agent routing
+Start a message with `@agent-name` (e.g. `@researcher`) to route it straight to that sub-agent, bypassing the main chat entirely — a fast lane alongside the agent's own `delegate` tool, which it can choose to invoke on its own.
 
 ### Token usage tracking
 Input tokens, output tokens, and cached tokens are recorded per assistant message and displayed in the UI.
@@ -54,7 +63,7 @@ Risky tool calls (writing/editing files, publishing for download) pause and show
 Once a new chat's first reply comes back, its sidebar title is automatically replaced with a short, LLM-generated summary.
 
 ### Scheduled background runs
-A Nitro cron task can run the agent loop unattended — no browser tab needed — and reports results into a dedicated "Scheduled runs" chat you can check anytime.
+A Nitro cron task can run the agent loop unattended — no browser tab needed — and reports results into a dedicated "Scheduled runs" chat you can check anytime. A dot in the sidebar flags that chat once a run completes, and clears the next time you actually open it.
 
 ---
 

@@ -108,7 +108,16 @@ onMounted(() => {
   }
 
   if (isBrandNewChat) {
-    void chat.triggerAgent()
+    // Use the tool selection captured by index.vue at the moment this chat
+    // was actually created (see createChat()'s sessionStorage write), not
+    // whatever the shared `allowTools` cookie reads right now — this mount
+    // happens after navigation, and the cookie could have changed in
+    // between (e.g. the tools popover reopened on this very page) despite
+    // the user having submitted with a different selection showing.
+    const key = `gimbus:allowTools:${data.value!.id}`
+    const captured = sessionStorage.getItem(key)
+    sessionStorage.removeItem(key)
+    void chat.triggerAgent(captured ? JSON.parse(captured) as string[] : undefined)
   }
 })
 

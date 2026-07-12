@@ -173,11 +173,17 @@ export function useAgentChat({ chatId, initialMessages = [] }: UseAgentChatOptio
     await runStream({ message: text, ...(files && files.length > 0 ? { files } : {}) })
   }
 
-  async function triggerAgent() {
+  async function triggerAgent(overrideAllowTools?: string[]) {
     if (status.value === 'streaming') return
     error.value = null
     status.value = 'streaming'
-    await runStream({})
+    // Lets a caller pin down the tool set for this one call instead of
+    // reading the live `allowTools` cookie at the moment this actually runs
+    // — used for a brand-new chat's auto-triggered first turn (see
+    // chat/[id].vue), which fires after navigation and could otherwise race
+    // a since-changed cookie despite the user having seen a different
+    // selection at submission time.
+    await runStream(overrideAllowTools ? { allowTools: overrideAllowTools } : {})
   }
 
   function stop() {
