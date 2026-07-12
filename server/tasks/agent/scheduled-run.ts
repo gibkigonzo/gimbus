@@ -1,4 +1,5 @@
 import { db, schema } from 'hub:db'
+import { eq } from 'drizzle-orm'
 import { MODELS } from '#shared/utils/models'
 import { RISKY_TOOL_NAMES } from '../../utils/tool-runtime/build'
 import { resolveActiveToolNames } from '../../utils/agent/tool-selection'
@@ -70,6 +71,11 @@ export default defineTask({
     )
 
     await saveTurn(chat.id, model, result, { sealed: !result.aborted })
+
+    // Surfaces in the sidebar (see server/api/chats.get.ts, app/layouts/default.vue)
+    // so the user doesn't have to open this chat just to discover a run happened —
+    // cleared the next time it's actually opened (server/api/chats/[id].get.ts).
+    await db.update(schema.chats).set({ needsAttention: true }).where(eq(schema.chats.id, chat.id))
 
     return { result: 'ok' }
   }

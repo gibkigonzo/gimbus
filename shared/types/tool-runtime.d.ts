@@ -22,5 +22,16 @@ export interface ToolRuntimeState {
   tools: ToolSet
   catalog: ToolCatalogItem[]
   defaultEnabledToolNames: string[]
+  /**
+   * Tool names granted to a registered sub-agent (delegate.ts, or an
+   * @mention-routed turn in chats/[id].post.ts) that omits its own
+   * `allowTools` — computed once here so both call sites share one policy
+   * instead of independently re-deriving it. Allowlist-based (catalog's own
+   * `enabledByDefault`, minus RISKY_TOOL_NAMES) rather than a blocklist, so a
+   * tool that's `enabledByDefault: false` (e.g. hub_submit_answer,
+   * http_request, run_code) is excluded automatically without needing to be
+   * named here by hand.
+   */
+  defaultSubAgentToolNames: string[]
   close: () => Promise<void>
 }

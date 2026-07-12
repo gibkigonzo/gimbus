@@ -86,6 +86,8 @@ export interface StreamingAgentLoopOptions {
   model: string
   chatId: string
   allowTools?: string[]
+  /** Tag for observability telemetry (see core-loop.ts's `meta`). Defaults to 'main' — set e.g. `mention:<agentName>` for an @mention-invoked sub-agent turn. */
+  agentName?: string
   onCompleted?: (result: AgentLoopResult, pushSse: (chunk: SseChunk) => void | Promise<void>) => void | Promise<void>
 }
 

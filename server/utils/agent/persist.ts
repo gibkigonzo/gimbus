@@ -15,7 +15,7 @@ export async function saveTurn(
   chatId: string,
   model: string,
   result: AgentLoopResult,
-  { sealed }: { sealed: boolean }
+  { sealed, agentSource }: { sealed: boolean, agentSource?: string }
 ): Promise<void> {
   let assistantIdx = 0
   for (const msg of result.messages) {
@@ -29,7 +29,8 @@ export async function saveTurn(
         outputTokens: usage?.outputTokens ?? null,
         cachedTokens: usage?.cachedTokens ?? null,
         toolCalls: msg.tool_calls ? JSON.stringify(msg.tool_calls) : null,
-        sealed
+        sealed,
+        agentSource: agentSource ?? null
       })
     } else if (msg.role === 'tool') {
       await db.insert(schema.messages).values({
@@ -38,7 +39,8 @@ export async function saveTurn(
         toolCallId: msg.tool_call_id ?? null,
         toolCalledWith: msg.toolCalledWith ?? null,
         model,
-        sealed
+        sealed,
+        agentSource: agentSource ?? null
       })
     }
   }

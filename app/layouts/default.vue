@@ -21,7 +21,8 @@ const { data: chats, refresh: refreshChats } = await useFetch('/api/chats', {
     label: chat.title || 'Untitled',
     to: `/chat/${chat.id}`,
     icon: 'i-lucide-message-circle',
-    createdAt: chat.createdAt
+    createdAt: chat.createdAt,
+    needsAttention: chat.needsAttention
   }))
 })
 
@@ -115,16 +116,23 @@ defineShortcuts({
           :ui="{ link: 'overflow-hidden' }"
         >
           <template #chat-trailing="{ item }">
-            <div class="flex -mr-1.25 translate-x-full group-hover:translate-x-0 transition-transform">
-              <UButton
-                icon="i-lucide-x"
-                color="neutral"
-                variant="ghost"
-                size="xs"
-                class="text-muted hover:text-primary hover:bg-accented/50 focus-visible:bg-accented/50 p-0.5"
-                tabindex="-1"
-                @click.stop.prevent="deleteChat(item.id)"
+            <div class="flex items-center gap-1">
+              <span
+                v-if="item.needsAttention"
+                class="size-1.5 rounded-full bg-primary shrink-0"
+                title="Wymaga uwagi"
               />
+              <div class="flex -mr-1.25 translate-x-full group-hover:translate-x-0 transition-transform">
+                <UButton
+                  icon="i-lucide-x"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  class="text-muted hover:text-primary hover:bg-accented/50 focus-visible:bg-accented/50 p-0.5"
+                  tabindex="-1"
+                  @click.stop.prevent="deleteChat(item.id)"
+                />
+              </div>
             </div>
           </template>
         </UNavigationMenu>

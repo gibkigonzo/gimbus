@@ -25,6 +25,7 @@ function dbMessage(overrides: Partial<DbMessageFixture>): DbMessageFixture {
     toolCalledWith: null,
     attachments: null,
     sealed: false,
+    agentSource: null,
     createdAt: new Date(),
     ...overrides
   } as DbMessageFixture
@@ -92,6 +93,23 @@ describe('buildContext', () => {
   it('keeps a plain-text assistant message as a bare string', async () => {
     const { messages } = await buildContext([
       dbMessage({ role: 'assistant', content: 'Hello there.' })
+    ])
+    expect(messages[0]).toEqual({ role: 'assistant', content: 'Hello there.' })
+  })
+
+  it('marks an @mention sub-agent reply as delegated rather than the main agent\'s own words', async () => {
+    const { messages } = await buildContext([
+      dbMessage({ role: 'assistant', content: 'Here is what I found.', agentSource: 'researcher' })
+    ])
+    expect(messages[0]).toEqual({
+      role: 'assistant',
+      content: '[Delegated reply from sub-agent "researcher" — it did not see this conversation; this is a specialist\'s answer, not something you said]\nHere is what I found.'
+    })
+  })
+
+  it('does not annotate an ordinary assistant message with no agentSource', async () => {
+    const { messages } = await buildContext([
+      dbMessage({ role: 'assistant', content: 'Hello there.', agentSource: null })
     ])
     expect(messages[0]).toEqual({ role: 'assistant', content: 'Hello there.' })
   })

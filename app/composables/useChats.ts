@@ -5,6 +5,7 @@ export interface UIChat {
   label: string
   icon: string
   createdAt: string
+  needsAttention?: boolean
 }
 
 export function useChats(chats: Ref<UIChat[] | undefined>) {

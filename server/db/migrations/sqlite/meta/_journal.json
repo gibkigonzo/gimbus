@@ -71,6 +71,27 @@
       "when": 1783621288000,
       "tag": "0009_seed_default_persona",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1783831759665,
+      "tag": "0010_perfect_the_stranger",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1783833865566,
+      "tag": "0011_free_leech",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1783833900000,
+      "tag": "0012_seed_meta_prompt_skills",
+      "breakpoints": true
     }
   ]
 }

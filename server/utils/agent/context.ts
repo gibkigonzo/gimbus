@@ -57,13 +57,21 @@ async function dbMsgToParam(
       }
     case 'assistant': {
       const toolCalls = m.toolCalls ? JSON.parse(m.toolCalls) as { id: string, function: { name: string, arguments: string } }[] : undefined
+      // A row from an @mention-routed sub-agent turn (agentSource set, see
+      // persist.ts/chats/[id].post.ts) never saw this conversation and spoke
+      // under a different system prompt — replaying its text to a later
+      // ordinary turn without saying so would let the main agent mistake a
+      // specialist's answer for its own prior reasoning.
+      const content = m.agentSource && m.content
+        ? `[Delegated reply from sub-agent "${m.agentSource}" — it did not see this conversation; this is a specialist's answer, not something you said]\n${m.content}`
+        : m.content
       if (!toolCalls) {
-        return { role: 'assistant', content: m.content ?? '' }
+        return { role: 'assistant', content: content ?? '' }
       }
       return {
         role: 'assistant',
         content: [
-          ...(m.content ? [{ type: 'text' as const, text: m.content }] : []),
+          ...(content ? [{ type: 'text' as const, text: content }] : []),
           ...toolCalls.map(tc => ({
             type: 'tool-call' as const,
             toolCallId: tc.id,

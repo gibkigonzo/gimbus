@@ -28,7 +28,7 @@ export function runStreamingAgentLoop(options: StreamingAgentLoopOptions) {
         activeToolNames,
         options.model,
         abortController.signal,
-        { chatId: options.chatId, agentName: 'main' }
+        { chatId: options.chatId, agentName: options.agentName ?? 'main' }
       )
 
       // Always persist, aborted or not — result.aborted tells onCompleted

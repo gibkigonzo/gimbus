@@ -10,6 +10,7 @@ import { thinkTool } from '../tools/think'
 import { httpRequestTool } from '../tools/http-request'
 import { runCodeTool } from '../tools/run-code'
 import { recallTool, rememberTool } from '../tools/memory'
+import { listSkillsTool, getSkillTool, saveSkillTool } from '../tools/skills'
 import { createDelegateHandler } from '../tools/delegate'
 import { withLessons, withConfirmation } from './tool-wrappers'
 
@@ -37,8 +38,13 @@ import { withLessons, withConfirmation } from './tool-wrappers'
  * confirm anything — e.g. a scheduled Nitro task, see server/tasks/agent/ —
  * can filter these out of their active tool set up front, rather than letting
  * a call stall for withConfirmation's timeout and then auto-deny.
+ *
+ * `save_skill` is included for the same reason as `remember`: skills are
+ * global (cross-chat) standing instructions read back by every future
+ * conversation via list_skills/get_skill, so an unconfirmed write here is a
+ * prompt-injection target with a blast radius beyond the current chat.
  */
-export const RISKY_TOOL_NAMES = new Set(['write_file', 'edit_file', 'publish_for_download', 'remember', 'run_code'])
+export const RISKY_TOOL_NAMES = new Set(['write_file', 'edit_file', 'publish_for_download', 'remember', 'run_code', 'save_skill'])
 
 export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
   const toolsByName = new Map<string, Tool>()
@@ -81,6 +87,9 @@ export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
   registerTool('builtin', 'built-in', 'think', thinkTool, true)
   registerTool('builtin', 'built-in', 'recall', recallTool, true)
   registerTool('builtin', 'built-in', 'remember', rememberTool, true)
+  registerTool('builtin', 'built-in', 'list_skills', listSkillsTool, true)
+  registerTool('builtin', 'built-in', 'get_skill', getSkillTool, true)
+  registerTool('builtin', 'built-in', 'save_skill', saveSkillTool, false)
   registerTool('builtin', 'built-in', 'http_request', httpRequestTool, false, { collectLessons: true })
   registerTool('builtin', 'built-in', 'run_code', runCodeTool, false, { collectLessons: true })
 
@@ -89,23 +98,32 @@ export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
     registerTool('mcp', mcpTool.sourceName, mcpTool.name, mcpTool.tool, mcpTool.enabledByDefault, { collectLessons: true })
   }
 
+  const defaultEnabledToolNames = catalog.filter(t => t.enabledByDefault).map(t => t.name)
+
+  // The *implicit* tool set for a registered sub-agent whose definition omits
+  // `allowTools` — shared by createDelegateHandler below and by the @mention
+  // routing branch in server/api/chats/[id].post.ts (via ToolRuntimeState),
+  // so both call sites use one policy instead of two independently-maintained
+  // copies. Allowlist-based (only tools enabled by default in the catalog,
+  // minus RISKY_TOOL_NAMES) rather than a blocklist — a tool that's
+  // `enabledByDefault: false` (http_request, run_code, hub_submit_answer,
+  // delegate itself, disabled MCP write tools, ...) is excluded
+  // automatically, without having to be named here by hand every time a new
+  // disabled-by-default tool is added.
+  const defaultSubAgentToolNames = defaultEnabledToolNames.filter(name => !RISKY_TOOL_NAMES.has(name))
+
   // delegate must be registered last — its handler closes over the complete tool set.
-  // The name list passed here is only used as the *implicit* tool set for a
-  // sub-agent whose registry entry omits `allowTools` — RISKY_TOOL_NAMES and
-  // http_request are excluded from that implicit grant so a future agent type
-  // that forgets to set `allowTools` doesn't silently inherit write-capable,
-  // persona-writing, or secret-injecting tools. An agent definition that needs
-  // one of these can still list it explicitly in its own `allowTools`.
   const delegateTool = createDelegateHandler(
     Object.fromEntries(toolsByName) as ToolSet,
-    Array.from(toolsByName.keys()).filter(name => !RISKY_TOOL_NAMES.has(name) && name !== 'http_request')
+    defaultSubAgentToolNames
   )
   registerTool('builtin', 'built-in', 'delegate', delegateTool, false)
 
   return {
     tools: Object.fromEntries(toolsByName) as ToolSet,
     catalog,
-    defaultEnabledToolNames: catalog.filter(t => t.enabledByDefault).map(t => t.name),
+    defaultEnabledToolNames,
+    defaultSubAgentToolNames,
     close: mcp.close
   }
 }

@@ -41,6 +41,14 @@ if (!data.value) {
   throw createError({ statusCode: 404, statusMessage: 'Chat not found' })
 }
 
+// Explicitly marks this chat "seen" (a dedicated action, not a side effect of
+// the GET above — that GET is also hit by app/layouts/default.vue's sidebar
+// prefetch, a background warm-up rather than a real visit; see
+// server/api/chats/[id]/seen.post.ts) then refreshes the sidebar's own list
+// fetch (key: 'chats', see app/layouts/default.vue) so its badge drops.
+await $fetch(`/api/chats/${route.params.id}/seen`, { method: 'POST' }).catch(() => {})
+refreshNuxtData('chats')
+
 const input = ref('')
 const librarySelection = ref<FileAttachment[]>([])
 const showFileBrowser = ref(false)
@@ -156,29 +164,57 @@ watch(chat.error, (err) => {
             class="lg:pt-(--ui-header-height) pb-4 sm:pb-6"
           >
             <template #content="{ message }">
-              <!-- Role + model indicator -->
-              <div class="flex items-center gap-1.5 mb-2">
+              <!-- Role + model + token usage, all condensed into a single line -->
+              <div class="flex items-center gap-1 mb-2 flex-wrap">
                 <UBadge
                   v-if="castAgentMessage(message).role === 'user' || castAgentMessage(message).role === 'assistant'"
                   :label="castAgentMessage(message).role === 'user' ? 'Użytkownik' : 'Gimbus'"
                   :color="castAgentMessage(message).role === 'user' ? 'primary' : 'neutral'"
                   variant="subtle"
-                  size="xl"
+                  size="sm"
                 />
                 <UBadge
                   v-if="castAgentMessage(message).role === 'tool'"
                   label="Narzędzie"
                   color="info"
                   variant="subtle"
-                  size="xl"
+                  size="sm"
                 />
                 <UBadge
                   v-if="(castAgentMessage(message).role === 'assistant' || castAgentMessage(message).role === 'tool') && castAgentMessage(message).model"
                   :label="castAgentMessage(message).model!"
                   color="neutral"
                   variant="outline"
-                  size="lg"
+                  size="sm"
                 />
+                <template v-if="(castAgentMessage(message).role === 'assistant' || castAgentMessage(message).role === 'tool') && (castAgentMessage(message).inputTokens || castAgentMessage(message).outputTokens)">
+                  <UBadge
+                    :label="`wej: ${castAgentMessage(message).inputTokens}`"
+                    color="neutral"
+                    variant="outline"
+                    size="sm"
+                  />
+                  <UBadge
+                    :label="`wyj: ${castAgentMessage(message).outputTokens}`"
+                    color="neutral"
+                    variant="outline"
+                    size="sm"
+                  />
+                  <UBadge
+                    v-if="castAgentMessage(message).cachedTokens"
+                    :label="`cache: ${castAgentMessage(message).cachedTokens}`"
+                    color="success"
+                    variant="subtle"
+                    size="sm"
+                  />
+                  <UBadge
+                    v-if="castAgentMessage(message).truncated"
+                    label="ucięte — limit tokenów"
+                    color="warning"
+                    variant="subtle"
+                    size="sm"
+                  />
+                </template>
               </div>
 
               <template v-for="(part, index) in castAgentMessage(message).parts" :key="`${castAgentMessage(message).id}-${part.type}-${index}`">
@@ -196,78 +232,13 @@ watch(chat.error, (err) => {
                   {{ part.text }}
                 </p>
                 <!-- Tool result -->
-                <div
+                <ToolResultCard
                   v-else-if="part.type === 'tool-result'"
-                  class="text-xs font-mono my-1"
-                >
-                  <div class="text-muted font-semibold mb-1.5">
-                    {{ part.toolName }}
-                  </div>
-                  <template v-if="part.toolName === 'image_process' && JSON.parse(part.result as string)?.pathname">
-                    <img
-                      :src="`/api/blob/${JSON.parse(part.result as string).pathname}`"
-                      class="rounded max-w-sm max-h-64 object-contain"
-                    >
-                  </template>
-                  <UTabs
-                    v-else
-                    default-value="result"
-                    :items="[
-                      { label: 'Wynik', value: 'result' },
-                      { label: 'Argumenty', value: 'args' }
-                    ]"
-                    size="xs"
-                    color="neutral"
-                    variant="link"
-                  >
-                    <template #content="{ item }">
-                      <pre
-                        v-if="item.value === 'result'"
-                        class="bg-muted rounded p-2 whitespace-pre-wrap overflow-auto max-h-64 mt-1"
-                      >{{ JSON.parse(part.result as string) }}</pre>
-                      <pre
-                        v-else
-                        class="bg-muted rounded p-2 whitespace-pre-wrap overflow-auto max-h-64 mt-1"
-                      >{{ JSON.parse(part.toolCalledWith ?? '{}') }}</pre>
-                    </template>
-                  </UTabs>
-                </div>
+                  :tool-name="part.toolName"
+                  :result="part.result as string"
+                  :tool-called-with="part.toolCalledWith"
+                />
               </template>
-
-              <!-- Token usage: each step's cost lands on whichever message that step
-                   produced — a pure tool-calling step (no text output) still has one,
-                   attached to its tool-result message, not the assistant role only -->
-              <div
-                v-if="(castAgentMessage(message).role === 'assistant' || castAgentMessage(message).role === 'tool') && (castAgentMessage(message).inputTokens || castAgentMessage(message).outputTokens)"
-                class="flex items-center gap-1.5 mt-2 flex-wrap"
-              >
-                <UBadge
-                  :label="`wej: ${castAgentMessage(message).inputTokens}`"
-                  color="neutral"
-                  variant="outline"
-                  size="lg"
-                />
-                <UBadge
-                  :label="`wyj: ${castAgentMessage(message).outputTokens}`"
-                  color="neutral"
-                  variant="outline"
-                  size="lg"
-                />
-                <UBadge
-                  v-if="castAgentMessage(message).cachedTokens"
-                  :label="`cache: ${castAgentMessage(message).cachedTokens}`"
-                  color="success"
-                  variant="subtle"
-                  size="lg"
-                />
-                <UBadge
-                  v-if="castAgentMessage(message).truncated"
-                  label="ucięte — limit tokenów"
-                  color="warning"
-                  variant="subtle"
-                  size="lg"
-                />
-              </div>
             </template>
           </UChatMessages>
 

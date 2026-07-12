@@ -1,6 +1,7 @@
 import { db, schema } from 'hub:db'
 import { z } from 'zod'
 import { formatUserContent } from '../utils/agent/history'
+import { resolveSkillPrefix } from '../utils/agent/skill-prefix'
 import { seedSystemMessage } from '../utils/db/queries'
 
 const fileAttachmentSchema = z.object({
@@ -35,10 +36,18 @@ export default defineEventHandler(async (event) => {
 
   await seedSystemMessage(chat.id)
 
+  // A "/skillname" prefix on a chat's very first message must resolve the
+  // same way it does on every later message (see chats/[id].post.ts) —
+  // otherwise a skill only ever "works" from message #2 onward. Resolved
+  // before formatUserContent so the saved content is exactly what a later
+  // triggerAgent() call (no fresh `message`, see chats/[id].post.ts) will
+  // send to the LLM.
+  const resolvedMessage = await resolveSkillPrefix(message, !!files?.length)
+
   await db.insert(schema.messages).values({
     chatId: chat.id,
     role: 'user',
-    content: formatUserContent(message, files),
+    content: formatUserContent(resolvedMessage, files),
     model,
     attachments: files && files.length > 0 ? JSON.stringify(files) : null
   })

@@ -10,6 +10,7 @@ await client.execute(`
   CREATE TABLE chats (
     id text PRIMARY KEY NOT NULL,
     title text,
+    needs_attention integer DEFAULT false NOT NULL,
     created_at integer NOT NULL
   )
 `)
@@ -28,6 +29,7 @@ await client.execute(`
     tool_called_with text,
     attachments text,
     sealed integer DEFAULT false NOT NULL,
+    agent_source text,
     created_at integer NOT NULL
   )
 `)
@@ -88,5 +90,36 @@ describe('saveTurn', () => {
     await saveTurn(chatId, 'openai/gpt-4o-mini', result, { sealed: false })
 
     expect(await messagesFor(chatId)).toHaveLength(0)
+  })
+
+  it('tags every inserted row with agentSource when provided (an @mention sub-agent turn)', async () => {
+    const result: AgentLoopResult = {
+      messages: [
+        { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'read_text_file', arguments: '{}' } }] },
+        { role: 'tool', content: '{}', tool_call_id: 'call_1', toolCalledWith: '{}' },
+        { role: 'assistant', content: 'Summary from the researcher.' }
+      ],
+      usagePerTurn: [{ inputTokens: 10, outputTokens: 5, cachedTokens: 0 }, { inputTokens: 3, outputTokens: 2, cachedTokens: 0 }],
+      aborted: false
+    }
+
+    await saveTurn(chatId, 'openai/gpt-4o-mini', result, { sealed: true, agentSource: 'researcher' })
+
+    const rows = await messagesFor(chatId)
+    expect(rows).toHaveLength(3)
+    expect(rows.every(r => r.agentSource === 'researcher')).toBe(true)
+  })
+
+  it('leaves agentSource null for an ordinary main-agent turn', async () => {
+    const result: AgentLoopResult = {
+      messages: [{ role: 'assistant', content: 'Hi.' }],
+      usagePerTurn: [{ inputTokens: 1, outputTokens: 1, cachedTokens: 0 }],
+      aborted: false
+    }
+
+    await saveTurn(chatId, 'openai/gpt-4o-mini', result, { sealed: true })
+
+    const rows = await messagesFor(chatId)
+    expect(rows[0]!.agentSource).toBeNull()
   })
 })
