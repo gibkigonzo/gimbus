@@ -26,7 +26,8 @@ export default defineEventHandler(async (event) => {
         model: m.model,
         inputTokens: m.inputTokens,
         outputTokens: m.outputTokens,
-        cachedTokens: m.cachedTokens
+        cachedTokens: m.cachedTokens,
+        sealed: m.sealed
       }
 
       if (m.role === 'tool') {

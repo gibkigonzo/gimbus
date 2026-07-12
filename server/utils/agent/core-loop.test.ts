@@ -237,6 +237,27 @@ describe('runAgentLoopCore', () => {
     expect(chunkTypes).toContain('done')
   })
 
+  it('reports aborted: false when no signal is passed', async () => {
+    streamTextMock.mockReturnValue(fakeStreamTextResult([], []))
+    const result = await runAgentLoopCore(() => {}, { messages: [] }, {}, [], 'openai/gpt-4o-mini')
+    expect(result.aborted).toBe(false)
+  })
+
+  it('reports aborted: true when the passed signal was aborted, alongside whatever steps already completed', async () => {
+    const steps = [{ text: 'partial', toolCalls: [], toolResults: [], usage: fakeUsage(10, 2, 0) }]
+    streamTextMock.mockReturnValue(fakeStreamTextResult([{ type: 'abort' }], steps))
+    const controller = new AbortController()
+    controller.abort()
+
+    const result = await runAgentLoopCore(() => {}, { messages: [] }, {}, [], 'openai/gpt-4o-mini', controller.signal)
+
+    expect(result.aborted).toBe(true)
+    // Whatever fully-completed steps happened before the abort are still
+    // returned, not discarded — this is what makes "save partial progress"
+    // possible upstream in saveTurn().
+    expect(result.messages).toEqual([{ role: 'assistant', content: 'partial', tool_calls: undefined }])
+  })
+
   it('always ends with a done chunk, even when streamText throws before any part is emitted', async () => {
     streamTextMock.mockImplementation(() => {
       throw new Error('network down')

@@ -171,5 +171,10 @@ export async function runAgentLoopCore(
   }
 
   await pushSse({ type: 'done' })
-  return { messages: generatedMessages, usagePerTurn }
+  // Whatever's in generatedMessages at this point is already safe to persist
+  // even when aborted mid-turn: it's built from result.steps, which ai-sdk
+  // only ever populates with fully-finished steps (a tool call is never
+  // recorded without its paired result) — an abort just means fewer steps
+  // made it in, not a malformed one.
+  return { messages: generatedMessages, usagePerTurn, aborted: signal?.aborted ?? false }
 }

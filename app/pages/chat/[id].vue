@@ -10,6 +10,7 @@ const components = {
 }
 
 const route = useRoute()
+const router = useRouter()
 const toast = useToast()
 const clipboard = useClipboard()
 
@@ -82,24 +83,41 @@ function copy(_e: MouseEvent, message: UIMessage) {
   }, 2000)
 }
 
-// True only for a genuinely brand-new chat (no assistant reply anywhere yet) —
-// the very first turn, silently auto-continued right after chat creation.
-const isBrandNewChat = data.value?.messages.every(m => m.role !== 'assistant') ?? false
+// "No assistant reply yet" alone doesn't mean "brand new" — a chat where a
+// turn was cancelled or dropped mid-stream can also have no assistant reply
+// at all yet (e.g. aborted before any step finished). The `?new=1` query
+// param set only by index.vue's post-creation navigateTo() is what
+// disambiguates "just created, first turn never ran" from "returning to an
+// incomplete state" — both must hold.
+const isBrandNewChat = (data.value?.messages.every(m => m.role !== 'assistant') ?? false) && route.query.new === '1'
 
 onMounted(() => {
+  // One-shot signal — strip it immediately so a later reload of this same
+  // URL (e.g. after cancelling generation) is no longer mistaken for "new".
+  if (route.query.new !== undefined) {
+    const { new: _new, ...query } = route.query
+    void router.replace({ query })
+  }
+
   if (isBrandNewChat) {
     void chat.triggerAgent()
   }
 })
 
-// A later turn that got interrupted (refresh, closed tab) before the model
-// replied leaves the last message as 'user' with no assistant reply — unlike
-// the brand-new-chat case, this is never auto-continued: it requires an
-// explicit click so a dropped connection doesn't silently re-spend tokens
-// the moment you reopen the chat.
+// A later turn that got interrupted leaves either no reply at all (last
+// message role 'user') or, since saveTurn now persists whatever fully-
+// completed steps happened before the abort (see persist.ts), a trailing
+// assistant/tool message marked sealed: false. Either shape means the turn
+// didn't finish — unlike the brand-new-chat case, this is never
+// auto-continued: it requires an explicit click so a dropped connection
+// doesn't silently re-spend tokens the moment you reopen the chat.
+// (`sealed` on a live, not-yet-persisted message is `undefined`, not `false`
+// — the strict check below only fires once a refetch confirms it from the DB.)
 const needsReply = computed(() => {
   if (isBrandNewChat || chatStatus.value === 'streaming') return false
-  return chatMessages.value.at(-1)?.role === 'user'
+  const last = chatMessages.value.at(-1)
+  if (!last) return false
+  return last.role === 'user' || last.sealed === false
 })
 
 // Show toast on error

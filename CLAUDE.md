@@ -31,6 +31,7 @@ server/
     prompts.ts     # System prompt assembly
   db/schema.ts     # Drizzle ORM: chats, messages, files, memories tables
   plugins/         # Nitro plugin mounts $toolRuntime on H3 context
+  tasks/           # Nitro scheduled tasks (cron-triggered background agent runs)
   utils/observability/  # Vendor-neutral tracing sinks (console, lessons) fed by ai-sdk telemetry
 shared/
   types/           # Shared TypeScript types (agent, db, tool-runtime, SSE)
@@ -60,13 +61,14 @@ mcp.json           # MCP server declarations
 ## Agent Loop (`server/utils/agent/`)
 
 - `core-loop.ts` — `runAgentLoopCore()`: wraps ai-sdk `streamText()`; a `mapStreamPartToSse()` adapter maps its `fullStream` parts onto the app's SSE chunk shapes, and `result.steps` is used to rebuild DB-persistable messages after the stream ends. Accepts an `AbortSignal` passed down from the stream runner.
-- `stream-runner.ts` — wraps core loop in H3 SSE streaming; handles abort on client disconnect; saves new messages on completion via `onCompleted`
+- `stream-runner.ts` — wraps core loop in H3 SSE streaming; handles abort on client disconnect; always calls `onCompleted` — even on abort — so whatever steps fully completed before a dropped connection still get persisted
 - `tool-selection.ts` — `resolveActiveToolNames()` resolves the allowed tool name list from the request; passed to `streamText`'s `activeTools` option
 - `context.ts` — `buildContext()` builds `{ system, messages }` from DB messages (system message extracted separately per ai-sdk's dedicated `system` option); resolves image blobs inline
 - `model-provider.ts` — `getModel(modelId)`: ai-sdk `LanguageModel` factory backed by `@openrouter/ai-sdk-provider`
 - `history.ts` — `formatUserContent()` builds XML user message string; `stripUserContentXml()` recovers plain text for UI
-- `persist.ts` — `saveTurn()` persists assistant + tool messages after the loop completes (the user message itself is saved immediately when the request comes in, in `chats/[id].post.ts` — not gated behind turn completion, so a dropped connection doesn't also lose the message that was typed)
-- `title.ts` — `maybeGenerateChatTitle()`: on a chat's first turn only, generates a short LLM title, persists it, and pushes a `title` SSE chunk to refresh the sidebar
+- `persist.ts` — `saveTurn(chatId, model, result, { sealed })` persists assistant + tool messages after the loop completes; `sealed: false` marks the leftover of a turn cut short by an abort (`AgentLoopResult.aborted`) rather than a normal finish (the user message itself is saved immediately when the request comes in, in `chats/[id].post.ts` — not gated behind turn completion, so a dropped connection doesn't also lose the message that was typed)
+- `title.ts` — `maybeGenerateChatTitle()`: on a chat's first turn only (and only if the turn wasn't aborted), generates a short LLM title, persists it, and pushes a `title` SSE chunk to refresh the sidebar
+- `server/tasks/agent/scheduled-run.ts` — Nitro cron task (`nuxt.config.ts`'s `nitro.scheduledTasks`) that runs the agent loop unattended, reporting into a dedicated "Scheduled runs" chat; excludes confirmation-gated tools (no live human to answer a prompt) and reads the tool runtime via `useNitroApp().toolRuntimePromise`
 
 ## Tool Runtime (`server/utils/tool-runtime/`, `server/plugins/`)
 
@@ -91,6 +93,7 @@ mcp.json           # MCP server declarations
 | `recall` | `server/utils/tools/memory.ts` | Gradually discover long-term memory (persona, mood, opinions, user facts) via `list_categories` → `list_keys` → `get_value`, without dumping all values at once |
 | `remember` | `server/utils/tools/memory.ts` | Store or update a long-term fact (upsert by category+key) in the `memories` table |
 | `http_request` | `server/utils/tools/http-request.ts` | POST JSON to an allowlisted external host (seeded with `hub.ag3nts.org`); per-host secrets are injected server-side and can't be overridden by the model; **disabled by default** |
+| `run_code` | `server/utils/tools/run-code.ts` | Runs a JS snippet in an isolated Node child process (cwd = `playground/`, filesystem access outside it blocked by Node's Permission Model); **disabled by default**, confirmation-gated |
 | `delegate` | `server/utils/tools/delegate.ts` | Spawn predefined sub-agents in parallel by `agentName`; registry in `delegate-agents.ts` defines system prompts and tool sets; **disabled by default** |
 | `hub_submit_answer` | `server/utils/tools/hub.ts` | Submit a hub.ag3nts.org course task answer to `/verify`; **disabled by default**; excluded from the confirmation gate (driven in tight loops for some tasks) |
 
@@ -111,7 +114,7 @@ Configured in `mcp.json`. Currently active server: `filesystem` (scoped to `./pl
 Four tables (SQLite via Drizzle):
 
 - **`chats`**: `id`, `title`, `createdAt`
-- **`messages`**: `id`, `chatId` (FK cascade), `role` (user/assistant/system/tool), `content`, `model`, `inputTokens`, `outputTokens`, `cachedTokens`, `toolCalls` (JSON), `toolCallId`, `toolCalledWith` (JSON), `attachments` (JSON), `sealed` (bool, default false), `createdAt`
+- **`messages`**: `id`, `chatId` (FK cascade), `role` (user/assistant/system/tool), `content`, `model`, `inputTokens`, `outputTokens`, `cachedTokens`, `toolCalls` (JSON), `toolCallId`, `toolCalledWith` (JSON), `attachments` (JSON), `sealed` (bool, default false — `false` marks a turn cut short by an abort rather than a normal finish, see `persist.ts`), `createdAt`
 - **`files`**: `id`, `originalName`, `mediaType`, `pathname`, `playgroundPath`, `descriptionPath`, `description`, `size`, `createdAt`
 - **`memories`**: `id`, `category`, `key`, `value`, `createdAt`, `updatedAt` — global, cross-chat (no `chatId`); unique on `(category, key)`; backs the `recall`/`remember` tools
 
@@ -123,7 +126,7 @@ Four tables (SQLite via Drizzle):
 - **`useFileUpload`** — drag-drop/picker upload to `/api/upload`, tracks per-file status, returns `FileAttachment` objects (`type`, `mediaType`, `pathname`, `fileId`, `playgroundPath`, `isChunked`) attached to messages
 - **Tool result UI** — tool messages render result and call arguments in separate tabs
 - **Tool-call confirmation UI** — a `confirmation-request` SSE chunk shows an approve/deny modal (`ModalConfirm`); the response posts to `/api/chats/[id]/confirm`
-- **Interrupted-turn recovery** (`chat/[id].vue`) — if a chat's last message is a user message with no reply (turn dropped before completing), shows an explicit "Wygeneruj odpowiedź" button (`triggerAgent()`) instead of silently auto-continuing — a genuinely new chat's first turn is still auto-triggered
+- **Interrupted-turn recovery** (`chat/[id].vue`) — if the last message is a user message, or an assistant/tool message with `sealed: false` (a turn cut short by an abort — see Database Schema), shows an explicit "Wygeneruj odpowiedź" button (`triggerAgent()`) instead of silently auto-continuing. A genuinely new chat's first turn is still auto-triggered, disambiguated from "returning to an incomplete state" via a one-shot `?new=1` query param set only by chat-creation navigation and stripped on mount
 
 ## Build & Run
 
@@ -159,6 +162,8 @@ Requires `OPENROUTER_API_KEY` in `.env`.
 - **Long-term memory (`memories` table)** is the exception to the rule above — `useStorage()` in this project is in-memory only (no `nitro.storage` mount configured), so anything meant to survive a restart needs the durable SQLite/Drizzle store, not the KV pattern. `memories` is global (no `chatId`) and each fact is a single row written via atomic `INSERT ... ON CONFLICT DO UPDATE` on `(category, key)` — no optimistic-concurrency `version` field is needed the way `tasks.ts`'s whole-blob KV read-modify-write requires one. Default persona rows are seeded by a dedicated data-only migration (`server/db/migrations/sqlite/0009_seed_default_persona.sql`, using `INSERT OR IGNORE`) rather than a startup plugin — this runs in the same sequential `db:migrate`/dev-auto-migrate step as the `memories` table's own `CREATE TABLE`, so there's no race to seed before the table exists. Migrations that only insert data (no schema change) are a deliberate, occasional exception to "migrations are DDL-only" — keep them named descriptively (`..._seed_*`) so they read as content, not schema, at a glance
 - **Structured LLM output**: when an LLM call must return typed/validated data, use `structuredChat(messages, ZodSchema, model)` from `server/utils/openrouter.ts` (backed by ai-sdk's `generateText({ output: Output.object(...) })` — not the deprecated `generateObject`). For image input, use `analyzeImageStructured(dataUrl, prompt, ZodSchema, model)`. Never parse raw completion text manually.
 - **`delegate` agent registry**: new sub-agent types must be added to `AGENT_REGISTRY` in `server/utils/tools/delegate-agents.ts` (name → `systemPrompt` + `allowTools`); the LLM selects agents by name only — never accept `systemPrompt` as a tool argument (prompt injection vector). Omitting `allowTools` grants every registered tool *except* `delegate` itself and whatever's excluded from that implicit grant in `build.ts` (currently `RISKY_TOOL_NAMES` + `http_request`) — an agent definition that genuinely needs one of those must list it explicitly
+- **Nitro never awaits a plugin's async body** — anything outside a request that needs the tool runtime (e.g. a scheduled task) must read a `Promise` assigned synchronously on `nitroApp` (`nitroApp.toolRuntimePromise`, set by `tool-runtime.ts` before its own first `await`) and `await` it, not read a resolved-value snapshot — the snapshot can still be `undefined` when the consumer runs, since Nitro's plugin loader invokes plugins without waiting for them
+- **Known bug (unresolved)**: the MCP filesystem server's root is already `./playground` (per `mcp.json`), so `read_text_file`/`list_directory`/`search_files` need bare paths like `workflows/overview.md` — but the system prompt (`prompts.ts`) and `playground-scope.ts`'s `ALWAYS_ALLOWED_PREFIXES` both instruct `playground/workflows/...`-prefixed paths, causing intermittent "Parent directory does not exist" errors the model has to self-correct around
 - **Client-disconnect detection must use `res.on('close')`, not `req.on('close')`** — once a request's body has been read (always true here via `readValidatedBody`), `req`'s own `'close'` event no longer fires when the client disconnects mid-stream; `res`'s does. Verified against a raw h3 repro. Using `req` silently disables loop abortion — the turn just runs to completion in the background regardless of the client
 - **Tool error feedback ("lessons")**: use `withLessons()` (`tool-runtime/tool-wrappers.ts`) for tools that call flaky external systems (MCP tools, `hub_submit_answer`) — captured via the `lessons` observability sink on any `{ error }` result, merged into that tool's next result as a `hints` field. Never inject this into the system prompt (must stay static) or into purely local/deterministic tools
 - **Risky tool calls** should be wrapped with `withConfirmation()` — additive to, not a replacement for, `disabledByDefault` scoping. Don't gate tools driven in tight loops (many rapid calls expected per turn) — per-call confirmation makes those unusable. `remember` is gated for this reason even though it isn't file/filesystem-write-capable: `memories` is global (cross-chat) and read back by `recall` into every future conversation, so an unconfirmed write is a standing prompt-injection target with a blast radius beyond the current chat

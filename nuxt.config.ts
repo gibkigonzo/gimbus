@@ -33,7 +33,16 @@ export default defineNuxtConfig({
 
   nitro: {
     experimental: {
-      openAPI: true
+      openAPI: true,
+      tasks: true
+    },
+    // In-process croner scheduler — supported on the dev/node-server preset
+    // this project runs on (no wrangler/Cloudflare deploy config present).
+    // Would need Cloudflare Cron Triggers instead if ever deployed to an
+    // edge/serverless target. Placeholder cadence — adjust once the
+    // WORKFLOW_PROMPT in server/tasks/agent/scheduled-run.ts is real.
+    scheduledTasks: {
+      '0 8 * * *': ['agent:scheduled-run']
     }
   },
 

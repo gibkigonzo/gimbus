@@ -93,4 +93,23 @@ describe('useAgentChat', () => {
 
     expect(chat.messages.value.at(-1)).toMatchObject({ role: 'assistant', content: 'partial', truncated: true })
   })
+
+  it('stop() marks the last non-user message sealed:false, so needsReply can react without waiting for a reload', async () => {
+    fetchMock.mockResolvedValue(sseResponse([{ type: 'text-delta', text: 'partial reply' }, { type: 'done' }]))
+    const chat = useAgentChat({ chatId: 'chat-1' })
+    await chat.sendMessage('hello')
+
+    chat.stop()
+
+    expect(chat.messages.value.at(-1)).toMatchObject({ role: 'assistant', sealed: false })
+  })
+
+  it('stop() does not touch a trailing user message (nothing streamed back yet)', async () => {
+    const chat = useAgentChat({ chatId: 'chat-1' })
+    chat.messages.value.push({ id: '1', role: 'user', content: 'hello', parts: [{ type: 'text', text: 'hello' }] })
+
+    chat.stop()
+
+    expect(chat.messages.value.at(-1)).not.toHaveProperty('sealed')
+  })
 })

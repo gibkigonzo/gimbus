@@ -36,7 +36,12 @@ async function createChat(prompt: string) {
   })
 
   refreshNuxtData('chats')
-  navigateTo(`/chat/${chat?.id}`)
+  // `?new=1` is a one-shot signal consumed and stripped by chat/[id].vue on
+  // mount — it's what lets that page tell "genuinely just created, first
+  // turn never ran yet" apart from "returning here after a cancelled/dropped
+  // turn," which look identical from the message list alone (both are just
+  // one user message with no assistant reply).
+  navigateTo(`/chat/${chat?.id}?new=1`)
 }
 
 async function onSubmit() {

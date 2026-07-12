@@ -21,4 +21,6 @@ export interface AgentMessage {
   cachedTokens?: number | null
   /** True when this step's usage came from a finishReason: 'length' step — the model was cut off by maxOutputTokens */
   truncated?: boolean | null
+  /** Meaningful only for role 'assistant'/'tool': false means this message is the leftover of a turn cut short by an abort (client Stop / dropped connection) rather than a normal finish — see persist.ts's saveTurn. User rows also carry this column (DB default false) but it has no meaning there — never branch on it for role 'user'. */
+  sealed?: boolean | null
 }

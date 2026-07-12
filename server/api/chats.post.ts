@@ -1,6 +1,7 @@
 import { db, schema } from 'hub:db'
 import { z } from 'zod'
 import { formatUserContent } from '../utils/agent/history'
+import { seedSystemMessage } from '../utils/db/queries'
 
 const fileAttachmentSchema = z.object({
   type: z.literal('file'),
@@ -32,11 +33,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: 'Failed to create chat' })
   }
 
-  await db.insert(schema.messages).values({
-    chatId: chat.id,
-    role: 'system',
-    content: SYSTEM_PROMPT
-  })
+  await seedSystemMessage(chat.id)
 
   await db.insert(schema.messages).values({
     chatId: chat.id,

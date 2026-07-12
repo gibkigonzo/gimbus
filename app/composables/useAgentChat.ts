@@ -183,6 +183,12 @@ export function useAgentChat({ chatId, initialMessages = [] }: UseAgentChatOptio
   function stop() {
     abortController?.abort()
     status.value = 'idle'
+    // Optimistically mirror what persist.ts will save server-side (sealed:
+    // false on whatever's left of an aborted turn) so needsReply picks this
+    // up immediately — without it, a locally-streamed message has no
+    // `sealed` field at all until a reload re-fetches it from the DB.
+    const last = messages.value[messages.value.length - 1]
+    if (last && last.role !== 'user') last.sealed = false
   }
 
   async function regenerate() {

@@ -38,7 +38,11 @@ export default defineEventHandler(async (event) => {
   const { model, message, allowTools, files } = await readValidatedBody(event, bodySchema.parse)
 
   const chat = await getChatWithMessages(id)
-  const isFirstTurn = chat.messages.every(m => m.role !== 'assistant')
+  // A sealed:false assistant row is the leftover of a turn cut short by an
+  // abort (see persist.ts) — it doesn't count as "the first turn completed",
+  // otherwise resuming an interrupted first turn would permanently skip
+  // title generation (isFirstTurn would already read false on resume).
+  const isFirstTurn = chat.messages.every(m => m.role !== 'assistant' || !m.sealed)
 
   // Build XML content once — same string saved to DB and sent to LLM
   const userContent = message ? formatUserContent(message, files) : undefined
@@ -68,7 +72,7 @@ export default defineEventHandler(async (event) => {
     chatId: id,
     allowTools,
     onCompleted: async (result, pushSse) => {
-      await saveTurn(id, model, result)
+      await saveTurn(id, model, result, { sealed: !result.aborted })
       // On the real first turn the frontend triggers the loop with no `message`
       // (it was already saved by POST /api/chats) — fall back to the persisted
       // first user message rather than requiring a freshly-sent one.

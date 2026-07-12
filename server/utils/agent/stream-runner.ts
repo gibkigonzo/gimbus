@@ -31,12 +31,18 @@ export function runStreamingAgentLoop(options: StreamingAgentLoopOptions) {
         { chatId: options.chatId, agentName: 'main' }
       )
 
-      if (!abortController.signal.aborted) {
-        await options.onCompleted?.(result, chunk => eventStream.push(JSON.stringify(chunk)))
-      }
+      // Always persist, aborted or not — result.aborted tells onCompleted
+      // whether to mark what it saves as sealed (see persist.ts). A dropped
+      // connection or a user hitting Stop mid-turn shouldn't discard
+      // already-completed steps, only skip whatever hadn't finished yet.
+      await options.onCompleted?.(result, chunk => eventStream.push(JSON.stringify(chunk)))
     } catch (err: unknown) {
+      // Always log — even aborted, e.g. onCompleted's saveTurn failing while
+      // persisting partial progress must not fail silently just because the
+      // client is already gone. Only the SSE push (pointless with no listener)
+      // stays conditional on the connection still being live.
+      console.error('[agent] Error in agent loop', err)
       if (!abortController.signal.aborted) {
-        console.error('[agent] Error in agent loop', err)
         await eventStream.push(JSON.stringify({ type: 'error', message: (err as Error).message })).catch(() => {})
       }
     } finally {

@@ -18,7 +18,11 @@ export async function maybeGenerateChatTitle(
   result: AgentLoopResult,
   pushSse: (chunk: SseChunk) => void | Promise<void>
 ): Promise<void> {
-  if (!isFirstTurn || !userContent) return
+  // result.aborted: don't spend a real LLM call generating a title off a
+  // turn that got cut short (e.g. a closed tab a second after the first
+  // message) — sealed:false rows from persist.ts's partial-save aren't
+  // reliable "finished" content to summarize.
+  if (!isFirstTurn || !userContent || result.aborted) return
 
   try {
     const assistantText = result.messages.find(m => m.role === 'assistant')?.content ?? ''

@@ -68,6 +68,8 @@ export interface LoopMessage {
 export interface AgentLoopResult {
   messages: LoopMessage[]
   usagePerTurn: (AssistantUsage | null)[]
+  /** True when the turn was cut short by an abort signal (e.g. the client disconnected or hit Stop) rather than finishing normally — drives `sealed` on the persisted rows. */
+  aborted: boolean
 }
 
 /** Pre-built LLM context produced by buildContext(). */

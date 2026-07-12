@@ -8,6 +8,7 @@ import { grepFilesTool } from '../tools/search-file-contents'
 import { hubSubmitAnswerTool } from '../tools/hub'
 import { thinkTool } from '../tools/think'
 import { httpRequestTool } from '../tools/http-request'
+import { runCodeTool } from '../tools/run-code'
 import { recallTool, rememberTool } from '../tools/memory'
 import { createDelegateHandler } from '../tools/delegate'
 import { withLessons, withConfirmation } from './tool-wrappers'
@@ -30,8 +31,14 @@ import { withLessons, withConfirmation } from './tool-wrappers'
  * confirmation would make them unusable. http_request's blast radius is instead
  * bounded by its server-side host allowlist and secret-injection registry
  * (see http-request.ts) rather than a confirmation gate.
+ *
+ * `run_code` is included because arbitrary script execution has real (if
+ * playground-jailed) blast radius. Exported so callers with no live human to
+ * confirm anything — e.g. a scheduled Nitro task, see server/tasks/agent/ —
+ * can filter these out of their active tool set up front, rather than letting
+ * a call stall for withConfirmation's timeout and then auto-deny.
  */
-const RISKY_TOOL_NAMES = new Set(['write_file', 'edit_file', 'publish_for_download', 'remember'])
+export const RISKY_TOOL_NAMES = new Set(['write_file', 'edit_file', 'publish_for_download', 'remember', 'run_code'])
 
 export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
   const toolsByName = new Map<string, Tool>()
@@ -75,6 +82,7 @@ export async function buildToolRuntimeState(): Promise<ToolRuntimeState> {
   registerTool('builtin', 'built-in', 'recall', recallTool, true)
   registerTool('builtin', 'built-in', 'remember', rememberTool, true)
   registerTool('builtin', 'built-in', 'http_request', httpRequestTool, false, { collectLessons: true })
+  registerTool('builtin', 'built-in', 'run_code', runCodeTool, false, { collectLessons: true })
 
   const mcp = await createMcpTools()
   for (const mcpTool of mcp.tools) {

@@ -15,7 +15,8 @@ const { maybeGenerateChatTitle } = await import('./title')
 function loopResult(assistantText: string): AgentLoopResult {
   return {
     messages: [{ role: 'assistant', content: assistantText }],
-    usagePerTurn: [null]
+    usagePerTurn: [null],
+    aborted: false
   }
 }
 
@@ -52,6 +53,16 @@ describe('maybeGenerateChatTitle', () => {
 
     expect(updateChatTitleMock).toHaveBeenCalledWith('chat-1', 'Debugging a flaky test')
     expect(pushSse).toHaveBeenCalledWith({ type: 'title', title: 'Debugging a flaky test' })
+  })
+
+  it('does nothing when the turn was aborted, even on the first turn with user content', async () => {
+    const aborted: AgentLoopResult = { messages: [{ role: 'assistant', content: 'partial' }], usagePerTurn: [null], aborted: true }
+
+    await maybeGenerateChatTitle('chat-1', 'model-a', true, '<message>\nhi\n</message>', aborted, pushSse)
+
+    expect(structuredChatMock).not.toHaveBeenCalled()
+    expect(updateChatTitleMock).not.toHaveBeenCalled()
+    expect(pushSse).not.toHaveBeenCalled()
   })
 
   it('swallows errors instead of throwing, so a failed title never breaks the turn', async () => {
