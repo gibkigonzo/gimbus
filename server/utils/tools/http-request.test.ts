@@ -46,9 +46,25 @@ describe('http_request', () => {
   })
 
   it('shapes fetch errors instead of throwing', async () => {
-    fetchMock.mockRejectedValue({ statusCode: 500, statusMessage: 'Server Error' })
+    fetchMock.mockRejectedValue({ statusCode: 400, statusMessage: 'Bad Request' })
     const result = await request({ url: 'https://hub.ag3nts.org/api/toolsearch', body: { query: 'x' } }) as { error: string, diagnostics: { statusCode: number } }
-    expect(result.error).toBe('Server Error')
-    expect(result.diagnostics.statusCode).toBe(500)
+    expect(result.error).toBe('Bad Request')
+    expect(result.diagnostics.statusCode).toBe(400)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries a transient 5xx error and succeeds', async () => {
+    vi.useFakeTimers()
+    fetchMock
+      .mockRejectedValueOnce({ statusCode: 503, statusMessage: 'Service Unavailable' })
+      .mockResolvedValueOnce({ results: [] })
+
+    const promise = request({ url: 'https://hub.ag3nts.org/api/toolsearch', body: { query: 'x' } })
+    await vi.runAllTimersAsync()
+    const result = await promise as { result?: unknown }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(result.result).toEqual({ results: [] })
+    vi.useRealTimers()
   })
 })

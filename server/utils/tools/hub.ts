@@ -2,9 +2,7 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import { shapeFetchError } from '../tool-runtime/fetch-error'
 import { toolSuccess, toolError } from '../tool-runtime/tool-response'
-import { HUB_HOST, HUB_APIKEY_ENV_VAR } from '../tool-runtime/hub-config'
-
-const VERIFY_URL = `https://${HUB_HOST}/verify`
+import { postToVerify } from '../tool-runtime/hub-config'
 
 const submitArgsSchema = z.object({
   task: z.string().min(1).describe('The task name, e.g. "firmware".'),
@@ -17,11 +15,7 @@ export const hubSubmitAnswerTool = tool({
   inputSchema: submitArgsSchema,
   execute: async (args) => {
     try {
-      const apikey = process.env[HUB_APIKEY_ENV_VAR] ?? ''
-      const result = await $fetch(VERIFY_URL, {
-        method: 'POST',
-        body: { apikey, task: args.task, answer: args.answer }
-      })
+      const result = await postToVerify(args.task, args.answer)
       return toolSuccess({ result })
     } catch (err: unknown) {
       const shaped = shapeFetchError(err)

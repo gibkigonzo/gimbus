@@ -63,7 +63,7 @@ Risky tool calls (writing/editing files, publishing for download) pause and show
 Once a new chat's first reply comes back, its sidebar title is automatically replaced with a short, LLM-generated summary.
 
 ### Scheduled background runs
-A Nitro cron task can run the agent loop unattended — no browser tab needed — and reports results into a dedicated "Scheduled runs" chat you can check anytime. A dot in the sidebar flags that chat once a run completes, and clears the next time you actually open it.
+A Nitro cron task can run the agent loop unattended — no browser tab needed — and reports results into a dedicated "Scheduled runs" chat you can check anytime. A dot in the sidebar flags that chat once a run completes, and clears the next time you actually open it. A run that fails outright or finishes without a real reply is called out explicitly in the chat, rather than silently marked as done.
 
 ---
 

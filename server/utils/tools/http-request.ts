@@ -1,6 +1,7 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import { shapeFetchError } from '../tool-runtime/fetch-error'
+import { fetchWithRetry } from '../tool-runtime/fetch-retry'
 import { toolSuccess, toolError } from '../tool-runtime/tool-response'
 import { HUB_HOST, HUB_APIKEY_ENV_VAR } from '../tool-runtime/hub-config'
 
@@ -46,7 +47,7 @@ export const httpRequestTool = tool({
     }
 
     try {
-      const result = await $fetch(args.url, {
+      const result = await fetchWithRetry(args.url, {
         method: 'POST',
         body,
         headers: args.headers

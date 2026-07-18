@@ -44,5 +44,21 @@ describe('hub_submit_answer', () => {
     const result = await submitAnswer('firmware', { confirmation: 'wrong' }) as { error: string, diagnostics: { statusCode: number } }
     expect(result.error).toBe('Bad Request')
     expect(result.diagnostics.statusCode).toBe(400)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries a transient 5xx error and succeeds', async () => {
+    vi.useFakeTimers()
+    fetchMock
+      .mockRejectedValueOnce({ statusCode: 503, statusMessage: 'Service Unavailable' })
+      .mockResolvedValueOnce({ code: 0, message: 'ok' })
+
+    const promise = submitAnswer('firmware', { confirmation: 'ECCS-abc' })
+    await vi.runAllTimersAsync()
+    const result = await promise as { result?: unknown }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(result.result).toEqual({ code: 0, message: 'ok' })
+    vi.useRealTimers()
   })
 })

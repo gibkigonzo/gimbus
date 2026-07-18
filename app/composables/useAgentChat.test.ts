@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.stubGlobal('ref', <T>(v: T) => ({ value: v }))
 
 vi.mock('./useModels', () => ({
-  useModels: () => ({ model: { value: 'openai/gpt-4o-mini' } })
+  useModels: () => ({ model: { value: 'openai/gpt-4.1-mini' } })
 }))
 
 vi.mock('#components', () => ({ LazyModalConfirm: {} }))
