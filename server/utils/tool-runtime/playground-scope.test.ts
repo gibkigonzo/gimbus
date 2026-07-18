@@ -5,7 +5,7 @@ vi.mock('../db/queries', () => ({
   getChatWithMessages: (...args: unknown[]) => getChatWithMessagesMock(...args)
 }))
 
-const { getAllowedPlaygroundPrefixes, isPathAllowed, ALWAYS_ALLOWED_PREFIXES } = await import('./playground-scope')
+const { getAllowedPlaygroundPrefixes, isPathAllowed, toServerRelativePath, ALWAYS_ALLOWED_PREFIXES } = await import('./playground-scope')
 
 function chatWithAttachments(attachmentsPerMessage: (Record<string, unknown>[] | null)[]) {
   return {
@@ -31,6 +31,28 @@ describe('isPathAllowed', () => {
 
   it('allows the shared workflows prefix', () => {
     expect(isPathAllowed('playground/workflows/overview.md', ALWAYS_ALLOWED_PREFIXES)).toBe(true)
+  })
+
+  it('allows the exact directory a prefix was granted for, with no trailing slash', () => {
+    expect(isPathAllowed('playground/uploads/file-1', ['playground/uploads/file-1/'])).toBe(true)
+  })
+})
+
+describe('toServerRelativePath', () => {
+  it('strips the "playground/" prefix the MCP filesystem server\'s own root already accounts for', () => {
+    expect(toServerRelativePath('playground/workflows/overview.md')).toBe('workflows/overview.md')
+  })
+
+  it('strips a leading "./playground/" the same way', () => {
+    expect(toServerRelativePath('./playground/workflows/overview.md')).toBe('workflows/overview.md')
+  })
+
+  it('maps the bare "playground" root to "."', () => {
+    expect(toServerRelativePath('playground')).toBe('.')
+  })
+
+  it('leaves an already-bare path unchanged', () => {
+    expect(toServerRelativePath('workflows/overview.md')).toBe('workflows/overview.md')
   })
 })
 

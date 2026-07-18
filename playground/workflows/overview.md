@@ -9,6 +9,7 @@ playground/
   workflows/      ← instructions for how to operate (you are here)
   research/       ← research notes, organized by date (YYYY-MM-DD/)
   projects/       ← long-running project context and notes
+  knowledge/      ← durable knowledge base: me/, world/, ops/, system/
 ```
 
 Subdirectories are created on demand — if a directory doesn't exist yet, create it before writing to it.
@@ -24,3 +25,4 @@ Subdirectories are created on demand — if a directory doesn't exist yet, creat
 - [see: ./tasks.md] — how to manage tasks across sessions
 - [see: ./research.md] — how to collect and store research materials
 - [see: ./uploads.md] — how to work with files uploaded by the user
+- [see: ./knowledge.md] — how the durable knowledge base is organized and how to write notes into it

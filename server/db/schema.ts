@@ -8,7 +8,7 @@ const timestamps = {
 export const chats = sqliteTable('chats', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   title: text('title'),
-  // Set by server/tasks/agent/scheduled-run.ts after an unattended run completes;
+  // Set by server/utils/agent/scheduled-task-runner.ts after an unattended run completes;
   // cleared by POST /api/chats/[id]/seen once the user actually opens the chat
   // (deliberately not GET /api/chats/[id] — that's also hit by the sidebar's
   // background prefetch, which isn't a real visit). Surfaces background-run
@@ -78,6 +78,17 @@ export const memories = sqliteTable('memories', {
 }, table => [
   uniqueIndex('memories_category_key_idx').on(table.category, table.key)
 ])
+
+// Per-scheduled-task durable counter for scheduled-task-review.ts's
+// consecutive-unopened-run heuristic. Must be a DB table, not useStorage() —
+// useStorage() in this project is in-memory only, and this counter is meant
+// to survive across restarts/redeploys since it accumulates over multiple
+// days of daily cron runs.
+export const scheduledTaskState = sqliteTable('scheduled_task_state', {
+  key: text('key').primaryKey(),
+  consecutiveUnopened: integer('consecutive_unopened').notNull().default(0),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
+})
 
 // Predefined instruction snippets — injected into a conversation either by
 // model decision (list_skills -> get_skill) or by explicit user action (a

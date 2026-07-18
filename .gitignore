@@ -30,3 +30,4 @@ logs
 playground/*
 artykuly
 !playground/workflows
+!playground/knowledge

@@ -5,7 +5,7 @@ import type { Tool, JSONSchema7 } from 'ai'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { ToolExecContext } from '#shared/types/tool-runtime'
-import { ALWAYS_ALLOWED_PREFIXES, getAllowedPlaygroundPrefixes, isPathAllowed } from './tool-runtime/playground-scope'
+import { ALWAYS_ALLOWED_PREFIXES, getAllowedPlaygroundPrefixes, isPathAllowed, toServerRelativePath } from './tool-runtime/playground-scope'
 
 interface McpServerExtended {
   allowTools?: string[]
@@ -99,17 +99,22 @@ export async function createMcpTools(): Promise<McpToolset> {
         description: descriptionOverride ?? mcpTool.description ?? '',
         inputSchema: jsonSchema(mcpTool.inputSchema as JSONSchema7),
         execute: async (args, { experimental_context }) => {
+          let forwardedArgs = args as Record<string, unknown>
           if (pathArgKey) {
-            const path = (args as Record<string, unknown>)[pathArgKey]
+            const path = forwardedArgs[pathArgKey]
             if (typeof path === 'string') {
               const chatId = (experimental_context as ToolExecContext | undefined)?.chatId
               const allowedPrefixes = chatId ? await getAllowedPlaygroundPrefixes(chatId) : ALWAYS_ALLOWED_PREFIXES
               if (!isPathAllowed(path, allowedPrefixes)) {
                 return { error: 'Access denied: path is outside this chat\'s scope. Use the exact pathname from the <attachments> block or ./playground/workflows/.' }
               }
+              // Scope-checked against the "playground/"-prefixed form above (matching
+              // every other convention) — only the copy actually sent to the server
+              // (rooted at ./playground itself, per mcp.json) gets that prefix stripped.
+              forwardedArgs = { ...forwardedArgs, [pathArgKey]: toServerRelativePath(path) }
             }
           }
-          const result = await client.callTool({ name: mcpTool.name, arguments: args as Record<string, unknown> })
+          const result = await client.callTool({ name: mcpTool.name, arguments: forwardedArgs })
           const parts = result.content as McpContentPart[]
           return parts.map(p => p.text ?? p.data ?? '').join('\n')
         }

@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm'
 // GET /api/chats/[id] — that GET is also hit by app/layouts/default.vue's
 // onNuxtReady sidebar prefetch (a background warm-up for the 10 most recent
 // chats, not a real visit), which would otherwise clear the sidebar's
-// "needs attention" badge (server/tasks/agent/scheduled-run.ts) before the
+// "needs attention" badge (server/utils/agent/scheduled-task-runner.ts) before the
 // user ever consciously opened the chat. Only app/pages/chat/[id].vue calls
 // this, once, after its own page-level fetch resolves.
 defineRouteMeta({
